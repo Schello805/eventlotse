@@ -13,6 +13,7 @@ sudo SERVER_NAME=deine-domain.de ./scripts/install-ubuntu-24.04.sh
 ```
 
 Das Script installiert Node.js, PostgreSQL und Nginx, legt Datenbank und Admin an, schreibt `/etc/eventlotse/eventlotse.env`, führt Migrationen aus, baut die App und startet den systemd-Service `eventlotse`.
+Die initialen Admin-Logindaten werden bei der Installation angezeigt. Das Passwort sollte nach dem ersten Login in der Adminseite geändert werden.
 
 ## Updates
 

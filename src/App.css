@@ -185,6 +185,16 @@
   color: #0f766e;
 }
 
+.link-button {
+  border: 0;
+  background: transparent;
+  color: #0f5f59;
+  font: inherit;
+  font-weight: 800;
+  padding: 0;
+  cursor: pointer;
+}
+
 .auth-menu {
   position: relative;
   flex: 0 0 auto;
@@ -246,6 +256,11 @@ textarea {
   min-height: 130px;
   resize: vertical;
   font: inherit;
+}
+
+.task-card textarea {
+  min-height: 72px;
+  font-size: 13px;
 }
 
 .workspace {

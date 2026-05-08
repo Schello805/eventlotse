@@ -25,6 +25,8 @@ Rev. `v0.4.0` enthält neben der Frontend-App jetzt auch eine erste Self-Hosting
 - Footer mit Impressum, Datenschutz, Cookiehinweisen, GitHub-Link und automatisch aus `package.json` gelesener Rev.-Nummer
 - Adminseite für SMTP-Konfiguration, Base URL, Benutzerverwaltung, Passwort-Reset, Deaktivierung, Löschen und Auditlog
 - SMTP-Testmail direkt aus der Adminseite inklusive SMTP-Passwort/App-Passwort
+- Adminbereich nur nach Admin-Login sichtbar
+- eigenes Admin-Passwort direkt in der Adminseite ändern
 - PostgreSQL-Migrationen, Upload-Endpunkt und Backup-Script
 - Echte App-Routen für Dashboard, Admin, Eventdetails und Rechtsseiten
 - Validierte Formulare mit `react-hook-form` und `zod`
@@ -71,6 +73,7 @@ Die statischen Produktionsdateien liegen danach in `dist/` und können auf jedem
 ### Automatische Installation auf Ubuntu 24.04
 
 Das Installationsscript richtet auf einem Ubuntu-24.04-Server automatisch Node.js, PostgreSQL, Datenbank, Nginx, systemd-Service, Migrationen, Build und Upload-Verzeichnis ein.
+Dabei werden initiale Admin-Logindaten erzeugt und am Ende der Installation angezeigt. Mit diesen Daten meldest du dich einmal an und änderst danach direkt in der Adminseite dein Passwort.
 
 Auf dem Server ausführen:
 

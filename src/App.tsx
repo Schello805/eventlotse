@@ -285,7 +285,7 @@ function App() {
       },
     ],
   )
-  const [session, setSession] = useState({ email: 'admin@example.de', role: 'Admin' as Role, authenticated: false })
+  const [session, setSession] = useState({ email: 'info@schellenberger.biz', role: 'Helfer' as Role, authenticated: false })
   const [loginPassword, setLoginPassword] = useState('')
   const [toast, setToast] = useState<ToastState>(null)
 
@@ -354,6 +354,12 @@ function App() {
     }
   }
 
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined)
+    setSession({ email: 'info@schellenberger.biz', role: 'Helfer', authenticated: false })
+    notify('Du bist abgemeldet.')
+  }
+
   const addEvent = (data: EventFormValues) => {
     const next: EventPlan = {
       id: uid(),
@@ -412,7 +418,7 @@ function App() {
         </Link>
         <nav className="app-nav" aria-label="Hauptnavigation">
           <Link to="/"><LayoutDashboard size={15} /> Dashboard</Link>
-          <Link to="/admin"><Settings size={15} /> Admin</Link>
+          {session.authenticated && session.role === 'Admin' && <Link to="/admin"><Settings size={15} /> Admin</Link>}
         </nav>
         <GlobalSearch events={events} />
         <AuthControl
@@ -421,6 +427,7 @@ function App() {
           setPassword={setLoginPassword}
           setEmail={(email) => setSession({ ...session, email })}
           login={login}
+          logout={logout}
         />
       </header>
 
@@ -430,15 +437,20 @@ function App() {
           <Route
             path="/admin"
             element={
-              <AdminPage
-                users={adminUsers}
-                settings={settings}
-                auditLog={auditLog}
-                setUsers={setAdminUsers}
-                setSettings={setSettings}
-                addAudit={addAudit}
-                notify={notify}
-              />
+              session.authenticated && session.role === 'Admin' ? (
+                <AdminPage
+                  session={session}
+                  users={adminUsers}
+                  settings={settings}
+                  auditLog={auditLog}
+                  setUsers={setAdminUsers}
+                  setSettings={setSettings}
+                  addAudit={addAudit}
+                  notify={notify}
+                />
+              ) : (
+                <AdminLocked />
+              )
             }
           />
           <Route
@@ -602,12 +614,14 @@ function AuthControl({
   setPassword,
   setEmail,
   login,
+  logout,
 }: {
   session: { email: string; role: Role; authenticated: boolean }
   password: string
   setPassword: (password: string) => void
   setEmail: (email: string) => void
   login: () => void
+  logout: () => void
 }) {
   if (session.authenticated) {
     return (
@@ -615,6 +629,7 @@ function AuthControl({
         <Lock size={14} />
         <span>{session.email}</span>
         <strong>{session.role}</strong>
+        <button className="link-button" type="button" onClick={logout}>Logout</button>
       </div>
     )
   }
@@ -641,6 +656,19 @@ function AuthControl({
         <p className="help-text">Ohne Server läuft Eventlotse lokal im Admin-Modus weiter.</p>
       </div>
     </details>
+  )
+}
+
+function AdminLocked() {
+  return (
+    <section className="panel">
+      <div className="section-head">
+        <h2>Adminbereich geschützt</h2>
+        <ShieldCheck size={18} />
+      </div>
+      <p>Die Admin-Einstellungen sind nur für angemeldete Admin-Benutzer sichtbar.</p>
+      <p className="help-text">Melde dich mit den Installationsdaten an. Danach kannst du das Passwort in der Adminseite ändern.</p>
+    </section>
   )
 }
 
@@ -1177,6 +1205,7 @@ function EventWorkspace({
 }
 
 function AdminPage({
+  session,
   users,
   settings,
   auditLog,
@@ -1185,6 +1214,7 @@ function AdminPage({
   addAudit,
   notify,
 }: {
+  session: { email: string; role: Role; authenticated: boolean }
   users: AdminUser[]
   settings: AppSettings
   auditLog: AuditEntry[]
@@ -1196,6 +1226,7 @@ function AdminPage({
   const [toast, setToast] = useState<ToastState>(null)
   const [testMailTo, setTestMailTo] = useState(settings.smtpUser || 'info@schellenberger.biz')
   const [testMailPending, setTestMailPending] = useState(false)
+  const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' })
   const settingsForm = useForm<SettingsFormInput, unknown, SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
     defaultValues: settings,
@@ -1269,13 +1300,41 @@ function AdminPage({
         credentials: 'include',
         body: JSON.stringify({ to: testMailTo }),
       })
-      if (!response.ok) throw new Error('Testmail konnte nicht versendet werden.')
+      if (!response.ok) {
+        const error = await response.json().catch(() => null)
+        throw new Error(error?.message || 'Testmail konnte nicht versendet werden.')
+      }
       notify(`Testmail an "${testMailTo}" wurde versendet.`)
       addAudit(`Testmail an "${testMailTo}" wurde versendet.`)
-    } catch {
-      notify('Testmail ist erst verfügbar, wenn der Eventlotse-Server mit SMTP läuft.')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Testmail konnte nicht gesendet werden.')
     } finally {
       setTestMailPending(false)
+    }
+  }
+
+  const changeOwnPassword = async () => {
+    if (passwordDraft.newPassword !== passwordDraft.repeatPassword) {
+      notify('Die neuen Passwörter stimmen nicht überein.')
+      return
+    }
+    try {
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          currentPassword: passwordDraft.currentPassword,
+          newPassword: passwordDraft.newPassword,
+        }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.message || 'Passwort konnte nicht geändert werden.')
+      setPasswordDraft({ currentPassword: '', newPassword: '', repeatPassword: '' })
+      notify('Passwort wurde geändert.')
+      addAudit(`Admin "${session.email}" hat das eigene Passwort geändert.`)
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Passwort konnte nicht geändert werden.')
     }
   }
 
@@ -1343,6 +1402,26 @@ function AdminPage({
                 <Mail size={16} /> {testMailPending ? 'Sende...' : 'Testmail'}
               </button>
             </div>
+          </div>
+        </details>
+
+        <details className="panel admin-panel accordion-panel span-2">
+          <summary><span>Eigenes Passwort ändern</span><Lock size={18} /></summary>
+          <p className="help-text">Nach der Installation bitte das vorgegebene Admin-Passwort sofort durch ein eigenes Passwort ersetzen.</p>
+          <div className="admin-form">
+            <label className="field">
+              <span>Aktuelles Passwort</span>
+              <input type="password" value={passwordDraft.currentPassword} onChange={(event) => setPasswordDraft({ ...passwordDraft, currentPassword: event.target.value })} />
+            </label>
+            <label className="field">
+              <span>Neues Passwort</span>
+              <input type="password" value={passwordDraft.newPassword} onChange={(event) => setPasswordDraft({ ...passwordDraft, newPassword: event.target.value })} />
+            </label>
+            <label className="field">
+              <span>Neues Passwort wiederholen</span>
+              <input type="password" value={passwordDraft.repeatPassword} onChange={(event) => setPasswordDraft({ ...passwordDraft, repeatPassword: event.target.value })} />
+            </label>
+            <button className="primary" type="button" onClick={changeOwnPassword}><Save size={16} /> Passwort speichern</button>
           </div>
         </details>
 
@@ -1497,11 +1576,46 @@ function ActionBoard({
                   disabled={!canEdit}
                 />
                 <small>Fällig: {task.due || 'offen'}</small>
+                <input
+                  type="date"
+                  value={task.due}
+                  onChange={(change) =>
+                    updateAction({
+                      ...action,
+                      tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, due: change.target.value } : entry)),
+                    })
+                  }
+                  disabled={!canEdit}
+                />
+                <select
+                  value={task.ownerIds[0] || ''}
+                  onChange={(change) =>
+                    updateAction({
+                      ...action,
+                      tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, ownerIds: change.target.value ? [change.target.value] : [] } : entry)),
+                    })
+                  }
+                  disabled={!canEdit}
+                >
+                  <option value="">Verantwortlich offen</option>
+                  {members.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}
+                </select>
                 <select value={task.status} onChange={(change) => moveTask(task, change.target.value as Status)} disabled={!canEdit}>
                   <option value="todo">Offen</option>
                   <option value="doing">In Arbeit</option>
                   <option value="done">Erledigt</option>
                 </select>
+                <textarea
+                  value={task.notes}
+                  onChange={(change) =>
+                    updateAction({
+                      ...action,
+                      tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, notes: change.target.value } : entry)),
+                    })
+                  }
+                  placeholder="Notizen, Absprachen oder Einkaufsliste..."
+                  disabled={!canEdit}
+                />
                 <div className="owner-row">
                   {members.slice(0, 4).map((member) => (
                     <span className="avatar" title={member.email} key={member.id}>{member.name.slice(0, 2).toUpperCase()}</span>

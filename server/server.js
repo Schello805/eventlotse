@@ -131,6 +131,20 @@ app.post('/api/auth/logout', requireAuth, async (request, response) => {
   response.json({ ok: true })
 })
 
+app.post('/api/auth/change-password', requireAuth, async (request, response) => {
+  const { currentPassword, newPassword } = request.body || {}
+  if (!newPassword || String(newPassword).length < 10) {
+    return response.status(400).json({ message: 'Das neue Passwort muss mindestens 10 Zeichen lang sein.' })
+  }
+  const result = await query('SELECT password_hash FROM users WHERE id = $1', [request.user.id])
+  const ok = await bcrypt.compare(String(currentPassword || ''), result.rows[0]?.password_hash || '')
+  if (!ok) return response.status(400).json({ message: 'Das aktuelle Passwort stimmt nicht.' })
+  const passwordHash = await bcrypt.hash(String(newPassword), 12)
+  await query('UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2', [passwordHash, request.user.id])
+  await audit(request.user, 'Passwort wurde geändert.')
+  response.json({ ok: true })
+})
+
 app.get('/api/me', requireAuth, (request, response) => {
   response.json({ user: publicUser(request.user) })
 })
@@ -255,10 +269,19 @@ app.post('/api/uploads', requireAuth, upload.single('file'), async (request, res
 })
 
 app.post('/api/admin/test-mail', requireAuth, requireAdmin, async (request, response) => {
-  const to = request.body?.to || request.user.email
-  const info = await (await createTransport()).sendMail(await testMail(to))
-  await audit(request.user, `Testmail an "${to}" wurde versendet.`)
-  response.json({ ok: true, messageId: info.messageId, preview: info.message?.toString?.() })
+  try {
+    const to = request.body?.to || request.user.email
+    const info = await (await createTransport()).sendMail(await testMail(to))
+    await audit(request.user, `Testmail an "${to}" wurde versendet.`)
+    response.json({ ok: true, messageId: info.messageId, preview: info.message?.toString?.() })
+  } catch (error) {
+    const code = error?.code || error?.responseCode || 'SMTP_ERROR'
+    const detail = error?.response || error?.message || 'Unbekannter SMTP-Fehler'
+    response.status(502).json({
+      message: `Testmail konnte nicht gesendet werden (${code}). Prüfe Host, Port, TLS, Benutzer und Passwort.`,
+      detail,
+    })
+  }
 })
 
 app.put('/api/admin/settings', requireAuth, requireAdmin, async (request, response) => {
