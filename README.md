@@ -24,7 +24,7 @@ Rev. `v0.4.0` enthält neben der Frontend-App jetzt auch eine erste Self-Hosting
 - Basis-Offline-Cache per Service Worker
 - Footer mit Impressum, Datenschutz, Cookiehinweisen, GitHub-Link und automatisch aus `package.json` gelesener Rev.-Nummer
 - Adminseite für SMTP-Konfiguration, Base URL, Benutzerverwaltung, Passwort-Reset, Deaktivierung, Löschen und Auditlog
-- SMTP-Testmail direkt aus der Adminseite
+- SMTP-Testmail direkt aus der Adminseite inklusive SMTP-Passwort/App-Passwort
 - PostgreSQL-Migrationen, Upload-Endpunkt und Backup-Script
 - Echte App-Routen für Dashboard, Admin, Eventdetails und Rechtsseiten
 - Validierte Formulare mit `react-hook-form` und `zod`

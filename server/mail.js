@@ -1,16 +1,31 @@
 import nodemailer from 'nodemailer'
 import { config } from './config.js'
+import { query } from './db.js'
 
-export function createTransport() {
-  if (!config.smtp.host) {
+export async function getMailSettings() {
+  const result = await query("SELECT value FROM settings WHERE key = 'app'")
+  const stored = result.rows[0]?.value || {}
+  return {
+    host: stored.smtpHost || config.smtp.host,
+    port: Number(stored.smtpPort || config.smtp.port),
+    user: stored.smtpUser || config.smtp.user,
+    pass: stored.smtpPass && stored.smtpPass !== '********' ? stored.smtpPass : config.smtp.pass,
+    from: stored.smtpFrom || config.smtp.from,
+    secure: stored.smtpTls === false ? true : config.smtp.secure,
+  }
+}
+
+export async function createTransport() {
+  const settings = await getMailSettings()
+  if (!settings.host) {
     return nodemailer.createTransport({ jsonTransport: true })
   }
 
   return nodemailer.createTransport({
-    host: config.smtp.host,
-    port: config.smtp.port,
-    secure: config.smtp.secure,
-    auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.pass } : undefined,
+    host: settings.host,
+    port: settings.port,
+    secure: settings.secure,
+    auth: settings.user ? { user: settings.user, pass: settings.pass } : undefined,
   })
 }
 
@@ -58,10 +73,11 @@ function baseTemplate({ title, intro, sections, buttonUrl, buttonLabel }) {
   `
 }
 
-export function invitationMail({ to, event, inviter }) {
+export async function invitationMail({ to, event, inviter }) {
+  const settings = await getMailSettings()
   const url = `${config.publicBaseUrl}/events/${event.id}`
   return {
-    from: config.smtp.from,
+    from: settings.from,
     to,
     subject: `Einladung zu "${event.name}" in Eventlotse`,
     html: baseTemplate({
@@ -79,9 +95,10 @@ export function invitationMail({ to, event, inviter }) {
   }
 }
 
-export function testMail(to) {
+export async function testMail(to) {
+  const settings = await getMailSettings()
   return {
-    from: config.smtp.from,
+    from: settings.from,
     to,
     subject: 'Eventlotse Testmail',
     html: baseTemplate({

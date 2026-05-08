@@ -63,7 +63,7 @@ sudo /opt/eventlotse/scripts/backup-postgres.sh
 - Authentifizierung mit HttpOnly-Cookie
 - Rollenmodell: Admin, Helfer, Künstler
 - Event-spezifische Mitgliederrechte
-- Admin-Konfiguration für SMTP, Base URL, Benutzerverwaltung und Auditlog
+- Admin-Konfiguration für SMTP inklusive Passwort/App-Passwort, Base URL, Benutzerverwaltung und Auditlog
 - Dateiablage für Flyer, Rechnungen, Tech-Rider und Pläne
 - HTML-Testmail und HTML-Einladungsmail
 - Backup-Script für PostgreSQL

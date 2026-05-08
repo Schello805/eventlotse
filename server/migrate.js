@@ -89,6 +89,7 @@ async function main() {
       smtpHost: config.smtp.host,
       smtpPort: config.smtp.port,
       smtpUser: config.smtp.user,
+      smtpPass: config.smtp.pass,
       smtpFrom: config.smtp.from,
       smtpTls: !config.smtp.secure,
     })],

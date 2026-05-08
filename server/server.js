@@ -162,7 +162,7 @@ app.get('/api/bootstrap', requireAuth, async (request, response) => {
 
   response.json({
     events: eventsResult.rows.map(eventFromRow),
-    settings,
+    settings: settings ? { ...settings, smtpPass: settings.smtpPass ? '********' : '' } : null,
     users,
     auditLog,
   })
@@ -232,8 +232,8 @@ app.post('/api/events/:eventId/members', requireAuth, async (request, response) 
   }
   await query('UPDATE events SET data = $1, updated_at = now() WHERE id = $2', [JSON.stringify(updatedEvent), request.params.eventId])
 
-  const transport = createTransport()
-  await transport.sendMail(invitationMail({ to: normalizedEmail, event: updatedEvent, inviter: request.user.email }))
+  const transport = await createTransport()
+  await transport.sendMail(await invitationMail({ to: normalizedEmail, event: updatedEvent, inviter: request.user.email }))
   await audit(request.user, `Einladung an "${normalizedEmail}" für "${event.name}" wurde versendet.`)
   response.status(201).json({ user: publicUser(user), event: updatedEvent, initialPassword: config.nodeEnv === 'development' ? tempPassword : undefined })
 })
@@ -256,19 +256,25 @@ app.post('/api/uploads', requireAuth, upload.single('file'), async (request, res
 
 app.post('/api/admin/test-mail', requireAuth, requireAdmin, async (request, response) => {
   const to = request.body?.to || request.user.email
-  const info = await createTransport().sendMail(testMail(to))
+  const info = await (await createTransport()).sendMail(await testMail(to))
   await audit(request.user, `Testmail an "${to}" wurde versendet.`)
   response.json({ ok: true, messageId: info.messageId, preview: info.message?.toString?.() })
 })
 
 app.put('/api/admin/settings', requireAuth, requireAdmin, async (request, response) => {
+  const current = (await query("SELECT value FROM settings WHERE key = 'app'")).rows[0]?.value || {}
+  const next = {
+    ...current,
+    ...request.body,
+    smtpPass: request.body.smtpPass && request.body.smtpPass !== '********' ? request.body.smtpPass : current.smtpPass,
+  }
   await query(
     `INSERT INTO settings (key, value, updated_at) VALUES ('app', $1, now())
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
-    [JSON.stringify(request.body)],
+    [JSON.stringify(next)],
   )
   await audit(request.user, 'Systemeinstellungen wurden gespeichert.')
-  response.json({ settings: request.body })
+  response.json({ settings: { ...next, smtpPass: next.smtpPass ? '********' : '' } })
 })
 
 app.use('/uploads', requireAuth, express.static(config.uploadDir))

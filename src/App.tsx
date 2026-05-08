@@ -120,6 +120,7 @@ type AppSettings = {
   smtpHost: string
   smtpPort: number
   smtpUser: string
+  smtpPass?: string
   smtpFrom: string
   smtpTls: boolean
 }
@@ -175,6 +176,7 @@ const defaultSettings: AppSettings = {
   smtpHost: 'smtp.example.org',
   smtpPort: 587,
   smtpUser: 'info@example.org',
+  smtpPass: '',
   smtpFrom: 'Eventlotse <info@example.org>',
   smtpTls: true,
 }
@@ -193,6 +195,7 @@ const settingsSchema = z.object({
   smtpHost: z.string().trim().min(1, 'SMTP Host fehlt.'),
   smtpPort: z.number().min(1).max(65535),
   smtpUser: z.string().trim().min(1, 'SMTP Benutzer fehlt.'),
+  smtpPass: z.string().optional(),
   smtpFrom: z.string().trim().min(1, 'Absender fehlt.'),
   smtpTls: z.boolean().default(true),
 })
@@ -1244,7 +1247,8 @@ function AdminPage({
   }
 
   const saveSettings = (data: SettingsFormValues) => {
-    setSettings(data)
+    const nextSettings = { ...data, smtpPass: data.smtpPass ? '********' : settings.smtpPass }
+    setSettings(nextSettings)
     addAudit('Systemeinstellungen wurden gespeichert.')
     fetch('/api/admin/settings', {
       method: 'PUT',
@@ -1252,6 +1256,7 @@ function AdminPage({
       credentials: 'include',
       body: JSON.stringify(data),
     }).catch(() => undefined)
+    settingsForm.reset({ ...nextSettings, smtpPass: '' })
     notify('Systemeinstellungen wurden gespeichert.')
   }
 
@@ -1311,6 +1316,11 @@ function AdminPage({
             <label className="field">
               <span className="label-row">SMTP Benutzer <HelpHint text="Benutzername oder E-Mail-Adresse für den Mailversand." /></span>
               <input placeholder="info@example.org" {...settingsForm.register('smtpUser')} />
+            </label>
+            <label className="field">
+              <span className="label-row">SMTP Passwort <HelpHint text="Passwort oder App-Passwort deines Mailkontos. Es wird nur beim Speichern an den Server gesendet und danach nicht wieder angezeigt." /></span>
+              <input type="password" placeholder={settings.smtpPass ? 'gespeichert, bei Änderung neu eingeben' : 'SMTP Passwort'} autoComplete="new-password" {...settingsForm.register('smtpPass')} />
+              <small className="help-text">Bei IONOS ist das normalerweise das Postfachpasswort oder ein App-Passwort.</small>
             </label>
             <label className="field">
               <span className="label-row">Absender <HelpHint text="Name und Adresse, die Empfänger später in Einladungen sehen." /></span>
