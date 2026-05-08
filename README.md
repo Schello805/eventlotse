@@ -140,3 +140,7 @@ Wichtig: Nicht-kommerzielle Einschränkungen entsprechen nicht der strengen OSI-
 - [Rechtliche Vorlagen](docs/LEGAL.md)
 - [Security Policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
+
+
+
+<img width="1730" height="781" alt="Bildschirmfoto 2026-05-08 um 18 57 12" src="https://github.com/user-attachments/assets/4d7d3949-c11a-40dd-ac89-8356622e3a5d" />
