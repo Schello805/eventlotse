@@ -6,15 +6,16 @@ Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.0` ist eine lauffähige Frontend-Version mit lokaler Browser-Speicherung, App-Routing, validierten Formularen und verbesserten Arbeitsansichten. Sie eignet sich zum Testen des Workflows und als Basis für die nächsten Ausbaustufen mit echter Authentifizierung, Datenbank und Benachrichtigungen.
+Rev. `v0.4.0` enthält neben der Frontend-App jetzt auch eine erste Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage und Backup-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
-- Lokale Sitzung mit Rollen: Admin, Helfer, Künstler
+- Login mit Admin, Helfer und Künstler-Rollen im Node/PostgreSQL-Backend
 - Event-Übersicht mit Event-Steckbrief, Motto, Zielgruppe, Gästezahl und Ort
 - Aktionskatalog mit typischen Event-Bausteinen wie Aufbau, Abbau, Musik, Flyer, Einladungen, Technik, Catering und GEMA
 - Aktionskarten mit Kanban-Unteraufgaben, Status, Verantwortlichen, Deadline und Datei-Merkliste
 - Teamverwaltung per E-Mail
+- hübsche HTML-Einladungsmails mit Eventinfos
 - Budget-Übersicht für Einnahmen und Ausgaben
 - Infrastruktur-Checkliste
 - Runsheet, Künstler-/Booking-Notizen, Wiki und Benachrichtigungsbereich
@@ -23,6 +24,8 @@ Rev. `v0.4.0` ist eine lauffähige Frontend-Version mit lokaler Browser-Speicher
 - Basis-Offline-Cache per Service Worker
 - Footer mit Impressum, Datenschutz, Cookiehinweisen, GitHub-Link und automatisch aus `package.json` gelesener Rev.-Nummer
 - Adminseite für SMTP-Konfiguration, Base URL, Benutzerverwaltung, Passwort-Reset, Deaktivierung, Löschen und Auditlog
+- SMTP-Testmail direkt aus der Adminseite
+- PostgreSQL-Migrationen, Upload-Endpunkt und Backup-Script
 - Echte App-Routen für Dashboard, Admin, Eventdetails und Rechtsseiten
 - Validierte Formulare mit `react-hook-form` und `zod`
 - Globale Suche, Event-Tabs, mobile Aufbauansicht, Leerzustände und Undo beim Benutzerlöschen
@@ -32,8 +35,10 @@ Rev. `v0.4.0` ist eine lauffähige Frontend-Version mit lokaler Browser-Speicher
 - React
 - TypeScript
 - Vite
+- Node.js / Express
+- PostgreSQL
 - lucide-react Icons
-- Browser LocalStorage für die erste Persistenzschicht
+- LocalStorage als Offline-/Fallback-Schicht, PostgreSQL im Self-Hosting-Betrieb
 
 ## Lokal starten
 
@@ -43,6 +48,14 @@ npm run dev
 ```
 
 Danach ist die App typischerweise unter `http://localhost:5173` erreichbar.
+
+Backend lokal starten, wenn PostgreSQL erreichbar ist:
+
+```bash
+cp .env.example .env
+npm run db:migrate
+npm run dev:server
+```
 
 ## Produktion bauen
 
@@ -57,7 +70,7 @@ Die statischen Produktionsdateien liegen danach in `dist/` und können auf jedem
 
 ### Automatische Installation auf Ubuntu 24.04
 
-Das Installationsscript richtet auf einem Ubuntu-24.04-Server automatisch Node.js, Nginx, Build und Deployment ein.
+Das Installationsscript richtet auf einem Ubuntu-24.04-Server automatisch Node.js, PostgreSQL, Datenbank, Nginx, systemd-Service, Migrationen, Build und Upload-Verzeichnis ein.
 
 Auf dem Server ausführen:
 
@@ -78,8 +91,10 @@ sudo SERVER_NAME=_ ./scripts/install-ubuntu-24.04.sh
 Standardpfade:
 
 - Repository: `/opt/eventlotse`
-- Webroot: `/var/www/eventlotse`
+- Konfiguration: `/etc/eventlotse/eventlotse.env`
+- Uploads: `/var/lib/eventlotse/uploads`
 - Nginx-Site: `/etc/nginx/sites-available/eventlotse`
+- systemd-Service: `eventlotse`
 
 Optionale Variablen:
 
@@ -87,8 +102,8 @@ Optionale Variablen:
 sudo \
   REPO_URL=https://github.com/Schello805/eventlotse.git \
   APP_DIR=/opt/eventlotse \
-  WEB_ROOT=/var/www/eventlotse \
   SERVER_NAME=deine-domain.de \
+  ADMIN_EMAIL=info@schellenberger.biz \
   ./scripts/install-ubuntu-24.04.sh
 ```
 
@@ -104,7 +119,13 @@ sudo ./scripts/update-ubuntu-24.04.sh
 Oder mit eigenen Pfaden:
 
 ```bash
-sudo APP_DIR=/opt/eventlotse WEB_ROOT=/var/www/eventlotse ./scripts/update-ubuntu-24.04.sh
+sudo APP_DIR=/opt/eventlotse ./scripts/update-ubuntu-24.04.sh
+```
+
+### Backups
+
+```bash
+sudo /opt/eventlotse/scripts/backup-postgres.sh
 ```
 
 ### HTTPS aktivieren
@@ -118,14 +139,14 @@ sudo certbot --nginx -d deine-domain.de
 
 ### Manuelles Deployment
 
-Eine einfache manuelle Variante ist Nginx, Caddy oder ein beliebiger Static-File-Host:
+Eine einfache manuelle Variante für Frontend-only ist Nginx, Caddy oder ein beliebiger Static-File-Host:
 
 ```bash
 npm ci
 npm run build
 ```
 
-Dann `dist/` als Webroot konfigurieren. Für echten Mehrbenutzerbetrieb sollten als nächstes Backend, Datenbank, Authentifizierung, Mailversand und Backups ergänzt werden. Siehe [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
+Dann `dist/` als Webroot konfigurieren. Für echten Mehrbenutzerbetrieb den Node-Server mit PostgreSQL verwenden. Siehe [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
 
 ## Lizenz
 

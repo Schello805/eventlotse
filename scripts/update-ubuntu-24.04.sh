@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 APP_DIR="${APP_DIR:-/opt/eventlotse}"
-WEB_ROOT="${WEB_ROOT:-/var/www/eventlotse}"
+ENV_FILE="${ENV_FILE:-/etc/eventlotse/eventlotse.env}"
 
 log() {
   printf '\n[Eventlotse] %s\n' "$1"
@@ -29,12 +29,20 @@ main() {
   log "Installiere Abhängigkeiten und baue die App."
   cd "$APP_DIR"
   npm ci
+  if [ -f "$ENV_FILE" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+    set +a
+  fi
+  npm run db:migrate
   npm run build
 
-  log "Deploye Build nach ${WEB_ROOT}."
-  install -d -m 0755 "$WEB_ROOT"
-  rsync -a --delete "$APP_DIR/dist/" "$WEB_ROOT/"
-  chown -R www-data:www-data "$WEB_ROOT"
+  chown -R www-data:www-data "$APP_DIR"
+
+  if systemctl list-unit-files eventlotse.service >/dev/null 2>&1; then
+    systemctl restart eventlotse
+  fi
 
   if command -v nginx >/dev/null 2>&1; then
     nginx -t

@@ -3,9 +3,18 @@ set -Eeuo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/Schello805/eventlotse.git}"
 APP_DIR="${APP_DIR:-/opt/eventlotse}"
-WEB_ROOT="${WEB_ROOT:-/var/www/eventlotse}"
 SERVER_NAME="${SERVER_NAME:-_}"
 NODE_MAJOR="${NODE_MAJOR:-20}"
+APP_PORT="${APP_PORT:-3000}"
+DB_NAME="${DB_NAME:-eventlotse}"
+DB_USER="${DB_USER:-eventlotse}"
+DB_PASSWORD="${DB_PASSWORD:-$(openssl rand -base64 24 | tr -d '\n')}"
+JWT_SECRET="${JWT_SECRET:-$(openssl rand -base64 48 | tr -d '\n')}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-info@schellenberger.biz}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -base64 18 | tr -d '\n')}"
+ENV_DIR="/etc/eventlotse"
+ENV_FILE="${ENV_DIR}/eventlotse.env"
+SYSTEMD_SERVICE="/etc/systemd/system/eventlotse.service"
 NGINX_SITE="/etc/nginx/sites-available/eventlotse"
 NGINX_SITE_LINK="/etc/nginx/sites-enabled/eventlotse"
 
@@ -48,20 +57,16 @@ server {
   listen [::]:80;
   server_name ${SERVER_NAME};
 
-  root ${WEB_ROOT};
-  index index.html;
-
   access_log /var/log/nginx/eventlotse.access.log;
   error_log /var/log/nginx/eventlotse.error.log;
 
   location / {
-    try_files \$uri \$uri/ /index.html;
-  }
-
-  location ~* \.(?:css|js|png|jpg|jpeg|gif|svg|ico|webp|woff2?)\$ {
-    expires 30d;
-    add_header Cache-Control "public, immutable";
-    try_files \$uri =404;
+    proxy_pass http://127.0.0.1:${APP_PORT};
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
   }
 }
 NGINX
@@ -73,13 +78,80 @@ NGINX
   systemctl reload nginx
 }
 
+setup_postgres() {
+  log "Installiere und konfiguriere PostgreSQL."
+  apt-get install -y postgresql postgresql-client
+  systemctl enable postgresql
+  systemctl start postgresql
+
+  sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" | grep -q 1 || \
+    sudo -u postgres psql -c "CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';"
+  sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" | grep -q 1 || \
+    sudo -u postgres createdb -O "${DB_USER}" "${DB_NAME}"
+}
+
+write_env_file() {
+  log "Schreibe Umgebungskonfiguration nach ${ENV_FILE}."
+  install -d -m 0750 "$ENV_DIR"
+  cat > "$ENV_FILE" <<ENV
+NODE_ENV=production
+PORT=${APP_PORT}
+HOST=127.0.0.1
+PUBLIC_BASE_URL=http://${SERVER_NAME}
+DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@localhost:5432/${DB_NAME}
+JWT_SECRET=${JWT_SECRET}
+COOKIE_SECURE=false
+UPLOAD_DIR=/var/lib/eventlotse/uploads
+ADMIN_EMAIL=${ADMIN_EMAIL}
+ADMIN_PASSWORD=${ADMIN_PASSWORD}
+SMTP_HOST=${SMTP_HOST:-}
+SMTP_PORT=${SMTP_PORT:-587}
+SMTP_USER=${SMTP_USER:-}
+SMTP_PASS=${SMTP_PASS:-}
+SMTP_FROM=${SMTP_FROM:-Eventlotse <${ADMIN_EMAIL}>}
+SMTP_SECURE=${SMTP_SECURE:-false}
+ENV
+  chmod 0640 "$ENV_FILE"
+  chown root:www-data "$ENV_FILE"
+  install -d -m 0750 -o www-data -g www-data /var/lib/eventlotse/uploads
+}
+
+write_systemd_service() {
+  log "Schreibe systemd-Service."
+  cat > "$SYSTEMD_SERVICE" <<SERVICE
+[Unit]
+Description=Eventlotse
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=${APP_DIR}
+EnvironmentFile=${ENV_FILE}
+ExecStart=/usr/bin/npm run server
+Restart=always
+RestartSec=5
+User=www-data
+Group=www-data
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+  chown -R www-data:www-data "$APP_DIR"
+  systemctl daemon-reload
+  systemctl enable eventlotse
+  systemctl restart eventlotse
+}
+
 main() {
   require_root
 
   log "Installiere Systempakete."
   apt-get update
-  apt-get install -y git nginx rsync ca-certificates curl gnupg
+  apt-get install -y git nginx ca-certificates curl gnupg openssl sudo
   install_node
+  setup_postgres
 
   if [ ! -d "$APP_DIR/.git" ]; then
     log "Klone Repository nach ${APP_DIR}."
@@ -93,16 +165,20 @@ main() {
   log "Installiere Abhängigkeiten und baue die App."
   cd "$APP_DIR"
   npm ci
+  write_env_file
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+  npm run db:migrate
   npm run build
 
-  log "Deploye Build nach ${WEB_ROOT}."
-  install -d -m 0755 "$WEB_ROOT"
-  rsync -a --delete "$APP_DIR/dist/" "$WEB_ROOT/"
-  chown -R www-data:www-data "$WEB_ROOT"
-
+  write_systemd_service
   write_nginx_site
 
   log "Fertig. Eventlotse ist über http://${SERVER_NAME} erreichbar."
+  log "Initialer Admin: ${ADMIN_EMAIL}"
+  log "Initiales Passwort: ${ADMIN_PASSWORD}"
   log "Für HTTPS empfohlen: sudo apt install certbot python3-certbot-nginx && sudo certbot --nginx -d deine-domain.de"
 }
 

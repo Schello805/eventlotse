@@ -213,6 +213,7 @@ type UserFormInput = z.input<typeof userFormSchema>
 const uid = () => crypto.randomUUID()
 
 const emptyEvents: EventPlan[] = []
+const legacyDemoEventNames = new Set(['Sommerfest am See', 'Hofkonzert', 'Geburtstag 40'])
 
 function normalizeRole(role: string): Role {
   if (role === 'Admin' || role === 'Helfer' || role === 'Künstler') return role
@@ -224,6 +225,11 @@ function normalizeEvent(event: EventPlan): EventPlan {
     ...event,
     members: event.members.map((member) => ({ ...member, role: normalizeRole(member.role) })),
   }
+}
+
+function isLegacyDemoEvent(event: EventPlan) {
+  const emails = event.members.map((member) => member.email)
+  return legacyDemoEventNames.has(event.name) && emails.some((email) => email.endsWith('@example.de'))
 }
 
 function normalizeAdminUser(user: AdminUser): AdminUser {
@@ -238,7 +244,7 @@ function loadEvents() {
   if (!raw) return emptyEvents
 
   try {
-    return (JSON.parse(raw) as EventPlan[]).map(normalizeEvent)
+    return (JSON.parse(raw) as EventPlan[]).map(normalizeEvent).filter((event) => !isLegacyDemoEvent(event))
   } catch {
     return emptyEvents
   }
@@ -276,7 +282,8 @@ function App() {
       },
     ],
   )
-  const [session, setSession] = useState({ email: 'admin@example.de', role: 'Admin' as Role })
+  const [session, setSession] = useState({ email: 'admin@example.de', role: 'Admin' as Role, authenticated: false })
+  const [loginPassword, setLoginPassword] = useState('')
   const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(() => {
@@ -293,6 +300,16 @@ function App() {
     }
   }, [adminUsers, setAdminUsers])
 
+  const loadRemoteData = async () => {
+    const response = await fetch('/api/bootstrap', { credentials: 'include' })
+    if (!response.ok) return
+    const data = await response.json()
+    if (Array.isArray(data.events)) setEvents(data.events.map(normalizeEvent).filter((event: EventPlan) => !isLegacyDemoEvent(event)))
+    if (Array.isArray(data.users)) setAdminUsers(data.users.map(normalizeAdminUser))
+    if (data.settings) setSettings(data.settings)
+    if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog)
+  }
+
   const addAudit = (action: string) => {
     setAuditLog((current) => [
       { id: uid(), at: new Date().toLocaleString('de-DE'), actor: session.email, action },
@@ -303,10 +320,35 @@ function App() {
   const updateEvent = (next: EventPlan) => {
     setEvents((current) => current.map((event) => (event.id === next.id ? next : event)))
     addAudit(`Event "${next.name}" wurde aktualisiert.`)
+    fetch(`/api/events/${next.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(next),
+    }).catch(() => undefined)
   }
 
   const notify = (message: string, actionLabel?: string, onAction?: () => void) => {
     setToast({ message, actionLabel, onAction })
+  }
+
+  const login = async () => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: session.email, password: loginPassword }),
+      })
+      if (!response.ok) throw new Error('Login fehlgeschlagen.')
+      const data = await response.json()
+      setSession({ email: data.user.email, role: data.user.role, authenticated: true })
+      setLoginPassword('')
+      await loadRemoteData()
+      notify('Anmeldung erfolgreich.')
+    } catch {
+      notify('Server-Login nicht erreichbar. Lokale Bearbeitung bleibt aktiv.')
+    }
   }
 
   const addEvent = (data: EventFormValues) => {
@@ -339,6 +381,19 @@ function App() {
     )
     addAudit(`Event "${next.name}" wurde angelegt.`)
     notify(`Event "${next.name}" wurde angelegt.`)
+    fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(next),
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data?.event) {
+          setEvents((current) => current.map((event) => (event.id === next.id ? normalizeEvent(data.event) : event)))
+        }
+      })
+      .catch(() => undefined)
     return next
   }
 
@@ -367,12 +422,25 @@ function App() {
           <select
             aria-label="Rolle"
             value={session.role}
+            disabled={session.authenticated}
             onChange={(event) => setSession({ ...session, role: event.target.value as Role })}
           >
             <option>Admin</option>
             <option>Helfer</option>
             <option>Künstler</option>
           </select>
+          {!session.authenticated && (
+            <>
+              <input
+                aria-label="Passwort"
+                type="password"
+                placeholder="Passwort"
+                value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+              />
+              <button className="ghost" type="button" onClick={login}>Anmelden</button>
+            </>
+          )}
         </div>
       </header>
 
@@ -463,8 +531,11 @@ function Dashboard({
       </div>
 
       <div className="home-layout">
-        <details className="panel create-panel accordion-panel" open={events.length === 0}>
-          <summary>Event erstellen</summary>
+        <section className="panel create-panel">
+          <div className="section-head">
+            <h2>Event erstellen</h2>
+            <HelpHint text="Dieses Formular bleibt bewusst immer sichtbar, damit du jederzeit schnell ein neues Event anlegen kannst." />
+          </div>
           <p className="help-text">Diese Basisdaten reichen für die erste Eventkarte. Details wie Team, Infrastruktur und Ablauf ergänzt du später im Event.</p>
           <form onSubmit={eventForm.handleSubmit(submitEvent)}>
             <label className="field">
@@ -497,7 +568,7 @@ function Dashboard({
             </label>
             <button className="primary" type="submit"><Plus size={16} /> Anlegen</button>
           </form>
-        </details>
+        </section>
 
         <section className="event-overview">
           <div className="section-head">
@@ -720,6 +791,9 @@ function EventWorkspace({
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
   const [newMember, setNewMember] = useState('')
+  const [budgetDraft, setBudgetDraft] = useState({ label: '', amount: '', type: 'expense' as 'income' | 'expense' })
+  const [runDraft, setRunDraft] = useState({ time: '', title: '', owner: '' })
+  const [wikiDraft, setWikiDraft] = useState('')
   const [activeTab, setActiveTab] = useState<EventTab>('overview')
   const isAdmin = session.role === 'Admin'
   const currentMember = event.members.find((member) => member.email === session.email)
@@ -766,22 +840,40 @@ function EventWorkspace({
     notify(`Aktion "${title}" wurde hinzugefügt.`)
   }
 
-  const addMember = () => {
+  const addMember = async () => {
     if (!newMember.trim()) return
+    const email = newMember.trim()
+    try {
+      const response = await fetch(`/api/events/${event.id}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, role: 'Helfer' }),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        updateEvent(data.event)
+        setNewMember('')
+        notify(`Einladung an ${email} wurde versendet.`)
+        return
+      }
+    } catch {
+      // Fallback für lokale Entwicklung ohne Backend.
+    }
     updateEvent({
       ...event,
       members: [
         ...event.members,
         {
           id: uid(),
-          name: newMember.split('@')[0],
-          email: newMember.trim(),
+          name: email.split('@')[0],
+          email,
           role: 'Helfer',
         },
       ],
     })
     setNewMember('')
-    notify(`${newMember.trim()} wurde zum Event-Team hinzugefügt.`)
+    notify(`${email} wurde lokal zum Event-Team hinzugefügt. Einladungsmails brauchen den Server.`)
   }
 
   const exportJson = () => {
@@ -793,6 +885,42 @@ function EventWorkspace({
     link.click()
     URL.revokeObjectURL(url)
     notify('Export wurde erstellt.')
+  }
+
+  const addBudgetLine = () => {
+    if (!budgetDraft.label.trim()) return
+    updateEvent({
+      ...event,
+      budget: [
+        ...event.budget,
+        {
+          id: uid(),
+          label: budgetDraft.label.trim(),
+          type: budgetDraft.type,
+          amount: Number(budgetDraft.amount || 0),
+        },
+      ],
+    })
+    setBudgetDraft({ label: '', amount: '', type: 'expense' })
+    notify('Budgetzeile wurde ergänzt.')
+  }
+
+  const addRunItem = () => {
+    if (!runDraft.time || !runDraft.title.trim()) return
+    updateEvent({
+      ...event,
+      runsheet: [...event.runsheet, { id: uid(), time: runDraft.time, title: runDraft.title.trim(), owner: runDraft.owner.trim() || 'offen' }]
+        .sort((a, b) => a.time.localeCompare(b.time)),
+    })
+    setRunDraft({ time: '', title: '', owner: '' })
+    notify('Ablaufpunkt wurde ergänzt.')
+  }
+
+  const addWikiEntry = () => {
+    if (!wikiDraft.trim()) return
+    updateEvent({ ...event, wiki: [...event.wiki, wikiDraft.trim()] })
+    setWikiDraft('')
+    notify('Wiki-Notiz wurde ergänzt.')
   }
 
   return (
@@ -839,13 +967,27 @@ function EventWorkspace({
           <section className="panel">
             <div className="section-head">
               <h2>Budget</h2>
-              <HelpHint text="Schnelle Übersicht aus Einnahmen minus Ausgaben. Die Detailbearbeitung folgt später." />
+              <HelpHint text="Schnelle Übersicht aus Einnahmen minus Ausgaben. Für kleine Events reichen wenige Zeilen." />
             </div>
             <div className="budget-total">
               <Euro size={18} />
               <strong>{(totals.income - totals.expense).toLocaleString('de-DE')} EUR</strong>
             </div>
             <p className="muted">Einnahmen {totals.income} EUR · Ausgaben {totals.expense} EUR</p>
+            <div className="compact-list">
+              {event.budget.map((line) => <span key={line.id}>{line.type === 'income' ? '+' : '-'} {line.label}: {line.amount.toLocaleString('de-DE')} EUR</span>)}
+            </div>
+            {isAdmin && (
+              <div className="quick-entry">
+                <input value={budgetDraft.label} onChange={(change) => setBudgetDraft({ ...budgetDraft, label: change.target.value })} placeholder="z.B. GEMA, Getränke, Spenden" />
+                <input type="number" value={budgetDraft.amount} onChange={(change) => setBudgetDraft({ ...budgetDraft, amount: change.target.value })} placeholder="Betrag" />
+                <select value={budgetDraft.type} onChange={(change) => setBudgetDraft({ ...budgetDraft, type: change.target.value as 'income' | 'expense' })}>
+                  <option value="expense">Ausgabe</option>
+                  <option value="income">Einnahme</option>
+                </select>
+                <button className="ghost" type="button" onClick={addBudgetLine}><Plus size={16} /> Hinzufügen</button>
+              </div>
+            )}
           </section>
 
           <section className="panel">
@@ -891,6 +1033,7 @@ function EventWorkspace({
               {event.actions.map((action) => (
                 <ActionBoard
                   key={action.id}
+                  eventId={event.id}
                   action={action}
                   members={event.members}
                   canEdit={isAdmin || action.owners.some((owner) => owner === currentMember?.id)}
@@ -967,8 +1110,37 @@ function EventWorkspace({
           <MobileSetupPanel event={event} />
           <section className="lower-grid">
             <InfoPanel icon={<ClipboardList />} title="Runsheet" help="Minutengenauer Tagesplan: Aufbau, Soundcheck, Einlass, Programmpunkte und Abbau." items={event.runsheet.map((item) => `${item.time} · ${item.title} · ${item.owner}`)} emptyText="Noch kein Ablaufplan. Lege die wichtigsten Zeiten für Aufbau, Einlass, Künstler und Abbau an." />
-            <InfoPanel icon={<Music />} title="Künstler & Booking" help="Früher oft als „Act“ bezeichnet: gemeint sind DJs, Bands, Redner oder andere Programmpunkte." items={event.actNotes ? [event.actNotes] : []} emptyText="Noch keine Künstler oder Programmpunkte hinterlegt." />
+            <section className="panel">
+              <div className="section-head">
+                <h2>Ablauf ergänzen</h2>
+                <Clock3 size={18} />
+              </div>
+              <div className="quick-entry">
+                <input type="time" value={runDraft.time} onChange={(change) => setRunDraft({ ...runDraft, time: change.target.value })} />
+                <input value={runDraft.title} onChange={(change) => setRunDraft({ ...runDraft, title: change.target.value })} placeholder="z.B. Aufbau, Einlass, Abbau" />
+                <input value={runDraft.owner} onChange={(change) => setRunDraft({ ...runDraft, owner: change.target.value })} placeholder="Wer?" />
+                <button className="ghost" type="button" onClick={addRunItem}><Plus size={16} /> Hinzufügen</button>
+              </div>
+            </section>
+            <section className="panel">
+              <div className="section-head">
+                <h2>Künstler & Booking</h2>
+                <HelpHint text="Früher oft als „Act“ bezeichnet: gemeint sind DJs, Bands, Redner oder andere Programmpunkte." />
+                <Music size={18} />
+              </div>
+              <textarea value={event.actNotes} onChange={(change) => updateEvent({ ...event, actNotes: change.target.value })} placeholder="Kontakte, Gage, Ankunft, Tech-Rider, Absprachen..." disabled={!isAdmin} />
+            </section>
             <InfoPanel icon={<FileText />} title="Wiki" help="Gemeinsames Wissen: Protokolle, Anleitungen, Lessons Learned und wiederkehrende Abläufe." items={event.wiki} emptyText="Noch keine Notizen. Sammle hier Lessons Learned, Anleitungen und Protokolle." />
+            <section className="panel">
+              <div className="section-head">
+                <h2>Wiki-Notiz</h2>
+                <FileText size={18} />
+              </div>
+              <div className="quick-entry">
+                <input value={wikiDraft} onChange={(change) => setWikiDraft(change.target.value)} placeholder="z.B. Schlüssel liegt bei Anna" />
+                <button className="ghost" type="button" onClick={addWikiEntry}><Plus size={16} /> Hinzufügen</button>
+              </div>
+            </section>
           </section>
         </>
       )}
@@ -994,6 +1166,8 @@ function AdminPage({
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
   const [toast, setToast] = useState<ToastState>(null)
+  const [testMailTo, setTestMailTo] = useState(settings.smtpUser || 'info@schellenberger.biz')
+  const [testMailPending, setTestMailPending] = useState(false)
   const settingsForm = useForm<SettingsFormInput, unknown, SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
     defaultValues: settings,
@@ -1047,7 +1221,32 @@ function AdminPage({
   const saveSettings = (data: SettingsFormValues) => {
     setSettings(data)
     addAudit('Systemeinstellungen wurden gespeichert.')
+    fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    }).catch(() => undefined)
     notify('Systemeinstellungen wurden gespeichert.')
+  }
+
+  const sendTestMail = async () => {
+    setTestMailPending(true)
+    try {
+      const response = await fetch('/api/admin/test-mail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ to: testMailTo }),
+      })
+      if (!response.ok) throw new Error('Testmail konnte nicht versendet werden.')
+      notify(`Testmail an "${testMailTo}" wurde versendet.`)
+      addAudit(`Testmail an "${testMailTo}" wurde versendet.`)
+    } catch {
+      notify('Testmail ist erst verfügbar, wenn der Eventlotse-Server mit SMTP läuft.')
+    } finally {
+      setTestMailPending(false)
+    }
   }
 
   return (
@@ -1098,6 +1297,18 @@ function AdminPage({
             </label>
             <button className="primary" type="submit"><Save size={16} /> Speichern</button>
           </form>
+          <div className="test-mail-box">
+            <div>
+              <strong>Testmail senden</strong>
+              <p className="help-text">Sendet eine hübsche Eventlotse-Testmail über die gespeicherten SMTP-Daten. So merkst du sofort, ob Einladungen später ankommen.</p>
+            </div>
+            <div className="inline-form">
+              <input value={testMailTo} onChange={(event) => setTestMailTo(event.target.value)} placeholder="empfaenger@example.de" />
+              <button className="ghost" type="button" onClick={sendTestMail} disabled={testMailPending || !testMailTo.trim()}>
+                <Mail size={16} /> {testMailPending ? 'Sende...' : 'Testmail'}
+              </button>
+            </div>
+          </div>
         </details>
 
         <section className="panel admin-panel span-2">
@@ -1181,12 +1392,14 @@ function AdminPage({
 }
 
 function ActionBoard({
+  eventId,
   action,
   members,
   canEdit,
   notify,
   updateAction,
 }: {
+  eventId: string
   action: ActionCard
   members: Member[]
   canEdit: boolean
@@ -1267,6 +1480,15 @@ function ActionBoard({
                     onChange={(change) => {
                       const file = change.target.files?.[0]
                       if (!file) return
+                      const formData = new FormData()
+                      formData.append('file', file)
+                      formData.append('eventId', eventId)
+                      formData.append('taskId', task.id)
+                      fetch('/api/uploads', {
+                        method: 'POST',
+                        credentials: 'include',
+                        body: formData,
+                      }).catch(() => undefined)
                       updateAction({
                         ...action,
                         tasks: action.tasks.map((entry) =>

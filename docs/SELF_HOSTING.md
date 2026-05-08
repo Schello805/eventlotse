@@ -1,6 +1,6 @@
 # Self-Hosting
 
-Eventlotse ist aktuell eine statische React-App. Daten werden im Browser gespeichert. Für private Tests reicht das aus; für Teams mit mehreren Geräten braucht es später ein Backend.
+Eventlotse besteht aus einer React-App und einer Node/Express-Serverbasis. Im produktiven Self-Hosting speichert der Server Daten in PostgreSQL, verwaltet Sessions, Rollen, Uploads, Auditlog und SMTP-Testmails. Ohne Server bleibt LocalStorage als Entwicklungs- und Offline-Fallback nutzbar.
 
 ## Automatische Installation auf Ubuntu 24.04
 
@@ -12,7 +12,7 @@ cd /tmp/eventlotse
 sudo SERVER_NAME=deine-domain.de ./scripts/install-ubuntu-24.04.sh
 ```
 
-Das Script installiert Node.js, Nginx und rsync, baut die App und deployt `dist/` nach `/var/www/eventlotse`.
+Das Script installiert Node.js, PostgreSQL und Nginx, legt Datenbank und Admin an, schreibt `/etc/eventlotse/eventlotse.env`, führt Migrationen aus, baut die App und startet den systemd-Service `eventlotse`.
 
 ## Updates
 
@@ -25,10 +25,13 @@ sudo ./scripts/update-ubuntu-24.04.sh
 
 ```bash
 npm ci
+cp .env.example .env
+npm run db:migrate
 npm run build
+npm run server
 ```
 
-Den Ordner `dist/` danach mit Nginx, Caddy, Apache oder einem Static-File-Host ausliefern.
+Der Node-Server liefert API und `dist/` gemeinsam aus. Für reine Frontend-Tests kann `npm run dev` weiter genutzt werden.
 
 ## Nginx-Beispiel
 
@@ -36,24 +39,37 @@ Den Ordner `dist/` danach mit Nginx, Caddy, Apache oder einem Static-File-Host a
 server {
   listen 80;
   server_name eventlotse.example.org;
-  root /var/www/eventlotse/dist;
-  index index.html;
 
   location / {
-    try_files $uri /index.html;
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
   }
 }
 ```
 
-## Nächste Produktionsbausteine
+## Backups
 
-- Backend-API, z.B. Node.js mit Fastify oder NestJS
-- Datenbank, z.B. PostgreSQL
-- Authentifizierung mit sicheren Sessions
+```bash
+sudo /opt/eventlotse/scripts/backup-postgres.sh
+```
+
+## Enthaltene Produktionsbausteine
+
+- Backend-API mit Node.js und Express
+- PostgreSQL-Schema mit Migration
+- Authentifizierung mit HttpOnly-Cookie
 - Rollenmodell: Admin, Helfer, Künstler
+- Event-spezifische Mitgliederrechte
 - Admin-Konfiguration für SMTP, Base URL, Benutzerverwaltung und Auditlog
 - Dateiablage für Flyer, Rechnungen, Tech-Rider und Pläne
-- Mail- oder Push-Benachrichtigungen
+- HTML-Testmail und HTML-Einladungsmail
+- Backup-Script für PostgreSQL
+
+## Nächste Ausbaustufen
+
 - iCal-Export für Kalender
 - PDF- und Excel-Export
-- Backup-Konzept
+- zeitgesteuerte Erinnerungen per Mail oder Push

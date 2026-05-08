@@ -1,0 +1,103 @@
+import bcrypt from 'bcryptjs'
+import { config } from './config.js'
+import { query } from './db.js'
+
+const schema = `
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS users (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email text NOT NULL UNIQUE,
+  name text NOT NULL DEFAULT '',
+  password_hash text NOT NULL,
+  role text NOT NULL CHECK (role IN ('Admin', 'Helfer', 'Künstler')),
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  last_login_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  data jsonb NOT NULL,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS event_members (
+  event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role text NOT NULL CHECK (role IN ('Admin', 'Helfer', 'Künstler')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (event_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS files (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  task_id text,
+  original_name text NOT NULL,
+  stored_name text NOT NULL,
+  mime_type text NOT NULL,
+  size_bytes integer NOT NULL,
+  uploaded_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key text PRIMARY KEY,
+  value jsonb NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  actor_email text NOT NULL,
+  action text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_data_gin ON events USING gin (data);
+CREATE INDEX IF NOT EXISTS idx_event_members_user ON event_members (user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs (created_at DESC);
+`
+
+async function ensureAdmin() {
+  const existing = await query('SELECT id FROM users WHERE role = $1 LIMIT 1', ['Admin'])
+  if (existing.rowCount) return
+
+  const passwordHash = await bcrypt.hash(config.adminPassword, 12)
+  await query(
+    `INSERT INTO users (email, name, password_hash, role, active)
+     VALUES ($1, $2, $3, 'Admin', true)`,
+    [config.adminEmail.toLowerCase(), 'Administrator', passwordHash],
+  )
+  console.log(`[Eventlotse] Admin angelegt: ${config.adminEmail}`)
+}
+
+async function main() {
+  await query(schema)
+  await ensureAdmin()
+  await query(
+    `INSERT INTO settings (key, value)
+     VALUES ('app', $1)
+     ON CONFLICT (key) DO NOTHING`,
+    [JSON.stringify({
+      baseUrl: config.publicBaseUrl,
+      smtpHost: config.smtp.host,
+      smtpPort: config.smtp.port,
+      smtpUser: config.smtp.user,
+      smtpFrom: config.smtp.from,
+      smtpTls: !config.smtp.secure,
+    })],
+  )
+  console.log('[Eventlotse] Datenbank ist aktuell.')
+  process.exit(0)
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})

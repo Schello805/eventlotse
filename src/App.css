@@ -176,7 +176,8 @@
 }
 
 input,
-select {
+select,
+textarea {
   max-width: 100%;
   border: 1px solid #cfd7e3;
   border-radius: 7px;
@@ -187,8 +188,15 @@ select {
 }
 
 input:not([type="checkbox"]):not([type="file"]),
-select {
+select,
+textarea {
   width: 100%;
+}
+
+textarea {
+  min-height: 130px;
+  resize: vertical;
+  font: inherit;
 }
 
 .workspace {
@@ -709,6 +717,20 @@ form {
   color: #0f766e;
 }
 
+.compact-list {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0;
+  color: #415066;
+  font-size: 13px;
+}
+
+.quick-entry {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .notification-list,
 .plain-list {
   padding: 0;
@@ -1038,6 +1060,23 @@ form {
   font-weight: 700;
 }
 
+.test-mail-box {
+  margin-top: 14px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #d7e6f3;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.test-mail-box strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
 .user-create-row,
 .user-row {
   display: grid;
@@ -1228,6 +1267,10 @@ form {
 
   .span-2 {
     grid-column: auto;
+  }
+
+  .test-mail-box {
+    grid-template-columns: 1fr;
   }
 }
 
