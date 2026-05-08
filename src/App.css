@@ -150,7 +150,6 @@
   font-size: 12px;
 }
 
-.login-panel,
 .inline-form {
   min-width: 0;
   display: flex;
@@ -158,12 +157,62 @@
   gap: 8px;
 }
 
-.login-panel input {
-  width: clamp(150px, 18vw, 200px);
+.auth-status,
+.auth-menu summary {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #cfd7e3;
+  border-radius: 7px;
+  background: white;
+  color: #172033;
+  font-weight: 800;
 }
 
-.login-panel select {
-  width: 90px;
+.auth-status {
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.auth-status span {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.auth-status strong {
+  color: #0f766e;
+}
+
+.auth-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.auth-menu summary {
+  padding: 5px 9px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.auth-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.auth-menu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 12;
+  width: min(320px, calc(100vw - 24px));
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid #cfd7e3;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 18px 38px rgba(25, 38, 63, 0.16);
 }
 
 .admin-nav {
@@ -1275,7 +1324,40 @@ form {
 }
 
 @media (max-width: 760px) {
-  .topbar,
+  .topbar {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: start;
+  }
+
+  .brand {
+    grid-column: 1;
+  }
+
+  .auth-menu,
+  .auth-status {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .app-nav,
+  .global-search {
+    grid-column: 1 / -1;
+  }
+
+  .global-search {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: none;
+    min-height: 38px;
+  }
+
+  .global-search input {
+    min-height: 32px;
+  }
+
   .event-hero {
     align-items: stretch;
     flex-direction: column;
@@ -1319,29 +1401,16 @@ form {
     min-height: 190px;
   }
 
-  .login-panel {
-    flex-wrap: wrap;
-  }
-
-  .login-panel input {
-    width: min(100%, 230px);
+  .auth-menu-panel {
+    right: 0;
   }
 }
 
 @media (max-width: 980px) {
-  .topbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .login-panel {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
   .app-nav,
   .global-search {
     width: 100%;
     max-width: none;
+    flex: 0 0 auto;
   }
 }

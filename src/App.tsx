@@ -412,36 +412,13 @@ function App() {
           <Link to="/admin"><Settings size={15} /> Admin</Link>
         </nav>
         <GlobalSearch events={events} />
-        <div className="login-panel" aria-label="Lokale Sitzung" title="Lokaler Entwicklungsmodus: Die echte Anmeldung folgt später mit Backend und Datenbank.">
-          <Lock size={16} />
-          <input
-            aria-label="Login E-Mail"
-            value={session.email}
-            onChange={(event) => setSession({ ...session, email: event.target.value })}
-          />
-          <select
-            aria-label="Rolle"
-            value={session.role}
-            disabled={session.authenticated}
-            onChange={(event) => setSession({ ...session, role: event.target.value as Role })}
-          >
-            <option>Admin</option>
-            <option>Helfer</option>
-            <option>Künstler</option>
-          </select>
-          {!session.authenticated && (
-            <>
-              <input
-                aria-label="Passwort"
-                type="password"
-                placeholder="Passwort"
-                value={loginPassword}
-                onChange={(event) => setLoginPassword(event.target.value)}
-              />
-              <button className="ghost" type="button" onClick={login}>Anmelden</button>
-            </>
-          )}
-        </div>
+        <AuthControl
+          session={session}
+          password={loginPassword}
+          setPassword={setLoginPassword}
+          setEmail={(email) => setSession({ ...session, email })}
+          login={login}
+        />
       </header>
 
       <main className="workspace dashboard-mode">
@@ -613,6 +590,54 @@ function Dashboard({
         </section>
       </div>
     </section>
+  )
+}
+
+function AuthControl({
+  session,
+  password,
+  setPassword,
+  setEmail,
+  login,
+}: {
+  session: { email: string; role: Role; authenticated: boolean }
+  password: string
+  setPassword: (password: string) => void
+  setEmail: (email: string) => void
+  login: () => void
+}) {
+  if (session.authenticated) {
+    return (
+      <div className="auth-status" aria-label="Angemeldeter Benutzer">
+        <Lock size={14} />
+        <span>{session.email}</span>
+        <strong>{session.role}</strong>
+      </div>
+    )
+  }
+
+  return (
+    <details className="auth-menu">
+      <summary><Lock size={14} /> Anmelden</summary>
+      <div className="auth-menu-panel">
+        <label className="field">
+          <span>E-Mail</span>
+          <input aria-label="Login E-Mail" value={session.email} onChange={(event) => setEmail(event.target.value)} />
+        </label>
+        <label className="field">
+          <span>Passwort</span>
+          <input
+            aria-label="Passwort"
+            type="password"
+            placeholder="Passwort"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </label>
+        <button className="primary" type="button" onClick={login}>Anmelden</button>
+        <p className="help-text">Ohne Server läuft Eventlotse lokal im Admin-Modus weiter.</p>
+      </div>
+    </details>
   )
 }
 
