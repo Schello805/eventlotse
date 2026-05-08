@@ -45,6 +45,15 @@ CREATE TABLE IF NOT EXISTS files (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS invite_tokens (
+  token text PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event_id uuid REFERENCES events(id) ON DELETE CASCADE,
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key text PRIMARY KEY,
   value jsonb NOT NULL,
@@ -62,6 +71,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_events_data_gin ON events USING gin (data);
 CREATE INDEX IF NOT EXISTS idx_event_members_user ON event_members (user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_invite_tokens_user ON invite_tokens (user_id);
 `
 
 async function ensureAdmin() {

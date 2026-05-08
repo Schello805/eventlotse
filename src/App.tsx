@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
@@ -130,6 +130,15 @@ type AuditEntry = {
   at: string
   actor: string
   action: string
+}
+
+type StoredFile = {
+  id: string
+  task_id?: string
+  original_name: string
+  mime_type: string
+  size_bytes: number
+  created_at: string
 }
 
 type EventTab = 'overview' | 'tasks' | 'team' | 'schedule'
@@ -303,7 +312,7 @@ function App() {
     }
   }, [adminUsers, setAdminUsers])
 
-  const loadRemoteData = async () => {
+  const loadRemoteData = useCallback(async () => {
     const response = await fetch('/api/bootstrap', { credentials: 'include' })
     if (!response.ok) return
     const data = await response.json()
@@ -311,7 +320,18 @@ function App() {
     if (Array.isArray(data.users)) setAdminUsers(data.users.map(normalizeAdminUser))
     if (data.settings) setSettings(data.settings)
     if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog)
-  }
+  }, [setAdminUsers, setAuditLog, setEvents, setSettings])
+
+  useEffect(() => {
+    fetch('/api/me', { credentials: 'include' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(async (data) => {
+        if (!data?.user) return
+        setSession({ email: data.user.email, role: data.user.role, authenticated: true })
+        await loadRemoteData()
+      })
+      .catch(() => undefined)
+  }, [loadRemoteData])
 
   const addAudit = (action: string) => {
     setAuditLog((current) => [
@@ -460,6 +480,7 @@ function App() {
           <Route path="/impressum" element={<LegalPage page="impressum" />} />
           <Route path="/datenschutz" element={<LegalPage page="datenschutz" />} />
           <Route path="/cookies" element={<LegalPage page="cookies" />} />
+          <Route path="/invite/:token" element={<InvitePage notify={notify} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
@@ -672,6 +693,71 @@ function AdminLocked() {
   )
 }
 
+function InvitePage({ notify }: { notify: (message: string, actionLabel?: string, onAction?: () => void) => void }) {
+  const { token } = useParams()
+  const navigate = useNavigate()
+  const [invite, setInvite] = useState<{ email: string; event?: { id: string; name: string; date?: string; location?: string } } | null>(null)
+  const [password, setPassword] = useState('')
+  const [repeat, setRepeat] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch(`/api/invites/${token}`)
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('Einladung ungültig.'))))
+      .then(setInvite)
+      .catch((failure) => setError(failure.message))
+  }, [token])
+
+  const acceptInvite = async () => {
+    if (password !== repeat) {
+      setError('Die Passwörter stimmen nicht überein.')
+      return
+    }
+    const response = await fetch(`/api/invites/${token}/accept`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ password }),
+    })
+    const data = await response.json().catch(() => null)
+    if (!response.ok) {
+      setError(data?.message || 'Einladung konnte nicht angenommen werden.')
+      return
+    }
+    notify('Einladung angenommen. Du bist jetzt angemeldet.')
+    navigate(invite?.event?.id ? `/events/${invite.event.id}` : '/')
+  }
+
+  return (
+    <section className="panel invite-page">
+      <div className="section-head">
+        <h2>Einladung annehmen</h2>
+        <Mail size={18} />
+      </div>
+      {error && <p className="form-error">{error}</p>}
+      {invite ? (
+        <>
+          <p>Du wurdest mit <strong>{invite.email}</strong>{invite.event ? ` zu "${invite.event.name}"` : ''} eingeladen.</p>
+          <p className="help-text">Setze ein eigenes Passwort. Danach kannst du dich mit deiner E-Mail-Adresse anmelden.</p>
+          <div className="admin-form">
+            <label className="field">
+              <span>Passwort</span>
+              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+            </label>
+            <label className="field">
+              <span>Passwort wiederholen</span>
+              <input type="password" value={repeat} onChange={(event) => setRepeat(event.target.value)} />
+            </label>
+            <button className="primary" type="button" onClick={acceptInvite}>Einladung annehmen</button>
+          </div>
+        </>
+      ) : !error ? (
+        <p>Einladung wird geprüft...</p>
+      ) : null}
+    </section>
+  )
+}
+
 function GlobalSearch({ events }: { events: EventPlan[] }) {
   const [query, setQuery] = useState('')
   const navigate = useNavigate()
@@ -851,6 +937,7 @@ function EventWorkspace({
   const [runDraft, setRunDraft] = useState({ time: '', title: '', owner: '' })
   const [wikiDraft, setWikiDraft] = useState('')
   const [activeTab, setActiveTab] = useState<EventTab>('overview')
+  const [files, setFiles] = useState<StoredFile[]>([])
   const isAdmin = session.role === 'Admin'
   const currentMember = event.members.find((member) => member.email === session.email)
   const openTaskCount = event.actions.flatMap((action) => action.tasks).filter((task) => task.status !== 'done').length
@@ -864,6 +951,13 @@ function EventWorkspace({
       { income: 0, expense: 0 },
     )
   }, [event.budget])
+
+  useEffect(() => {
+    fetch(`/api/events/${event.id}/files`, { credentials: 'include' })
+      .then((response) => (response.ok ? response.json() : { files: [] }))
+      .then((data) => setFiles(data.files || []))
+      .catch(() => setFiles([]))
+  }, [event.id])
 
   const addAction = (title: string, category: string) => {
     if (event.actions.some((action) => action.title === title)) return
@@ -943,6 +1037,16 @@ function EventWorkspace({
     notify('Export wurde erstellt.')
   }
 
+  const deleteFile = async (fileId: string) => {
+    const response = await fetch(`/api/files/${fileId}`, { method: 'DELETE', credentials: 'include' })
+    if (!response.ok) {
+      notify('Datei konnte nicht gelöscht werden.')
+      return
+    }
+    setFiles((current) => current.filter((file) => file.id !== fileId))
+    notify('Datei wurde gelöscht.')
+  }
+
   const addBudgetLine = () => {
     if (!budgetDraft.label.trim()) return
     updateEvent({
@@ -1010,7 +1114,12 @@ function EventWorkspace({
             <div className="section-head">
               <h2>Event-Steckbrief</h2>
               <HelpHint text="Der Steckbrief ist die gemeinsame Orientierung: Motto, Zielgruppe, Lageplan und Kontakt vor Ort." />
-              <button className="ghost" onClick={exportJson}><Download size={16} /> Export</button>
+              <div className="button-row">
+                <a className="ghost" href={`/api/events/${event.id}/calendar.ics`}><CalendarDays size={16} /> iCal</a>
+                <a className="ghost" href={`/api/events/${event.id}/export/tasks.csv`}><Download size={16} /> CSV</a>
+                <a className="ghost" href={`/api/events/${event.id}/export/runsheet.pdf`}><FileText size={16} /> PDF</a>
+                <button className="ghost" onClick={exportJson}><Download size={16} /> JSON</button>
+              </div>
             </div>
             <div className="profile-grid">
               <EditableField label="Motto" help="Kurzer Arbeitstitel oder Leitidee, damit alle wissen, worum es geht." value={event.motto} onChange={(motto) => updateEvent({ ...event, motto })} disabled={!isAdmin} />
@@ -1104,6 +1213,7 @@ function EventWorkspace({
               ))}
             </div>
           )}
+          <FileManager files={files} onDelete={deleteFile} />
         </section>
       )}
 
@@ -1338,6 +1448,16 @@ function AdminPage({
     }
   }
 
+  const runReminders = async () => {
+    const response = await fetch('/api/admin/reminders/run', { method: 'POST', credentials: 'include' })
+    const data = await response.json().catch(() => null)
+    if (!response.ok) {
+      notify(data?.message || 'Erinnerungen konnten nicht gesendet werden.')
+      return
+    }
+    notify(`${data.sent?.length || 0} Erinnerungsmails wurden gesendet.`)
+  }
+
   return (
     <section className="admin-page">
       <div className="admin-hero">
@@ -1487,7 +1607,10 @@ function AdminPage({
           <div className="section-head">
             <h2>Auditlog</h2>
             <HelpHint text="Nachvollziehbare Liste wichtiger Änderungen wie Benutzeraktionen, Passwort-Reset und Systemkonfiguration." />
-            <ClipboardList size={18} />
+            <div className="button-row">
+              <button className="ghost" type="button" onClick={runReminders}><Bell size={16} /> Erinnerungen senden</button>
+              <ClipboardList size={18} />
+            </div>
           </div>
           <ul className="audit-list">
             {auditLog.map((entry) => (
@@ -1655,6 +1778,35 @@ function ActionBoard({
         ))}
       </div>
     </article>
+  )
+}
+
+function FileManager({ files, onDelete }: { files: StoredFile[]; onDelete: (fileId: string) => void }) {
+  return (
+    <section className="panel files-panel">
+      <div className="section-head">
+        <h2>Dateien</h2>
+        <Upload size={18} />
+      </div>
+      {files.length === 0 ? (
+        <EmptyState title="Noch keine Dateien" text="Dateien werden direkt an Aufgaben hochgeladen und erscheinen danach hier." />
+      ) : (
+        <ul className="file-list">
+          {files.map((file) => (
+            <li key={file.id}>
+              <span>
+                <strong>{file.original_name}</strong>
+                <small>{Math.round(file.size_bytes / 1024)} KB · {new Date(file.created_at).toLocaleString('de-DE')}</small>
+              </span>
+              <a className="ghost" href={`/api/files/${file.id}/download`}><Download size={15} /> Download</a>
+              <button className="icon-button danger" type="button" onClick={() => onDelete(file.id)} aria-label={`${file.original_name} löschen`}>
+                <Trash2 size={16} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 

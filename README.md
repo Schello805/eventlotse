@@ -27,6 +27,10 @@ Rev. `v0.4.0` enthält neben der Frontend-App jetzt auch eine erste Self-Hosting
 - SMTP-Testmail direkt aus der Adminseite inklusive SMTP-Passwort/App-Passwort
 - Adminbereich nur nach Admin-Login sichtbar
 - eigenes Admin-Passwort direkt in der Adminseite ändern
+- sichere Einladungslinks mit Passwort setzen
+- Dateiliste mit Download und Löschen pro Event
+- iCal-Export, CSV-Aufgabenexport und PDF-Ablaufplan
+- manueller Erinnerungslauf für fällige Aufgaben
 - PostgreSQL-Migrationen, Upload-Endpunkt und Backup-Script
 - Echte App-Routen für Dashboard, Admin, Eventdetails und Rechtsseiten
 - Validierte Formulare mit `react-hook-form` und `zod`

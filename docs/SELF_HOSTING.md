@@ -67,10 +67,14 @@ sudo /opt/eventlotse/scripts/backup-postgres.sh
 - Admin-Konfiguration für SMTP inklusive Passwort/App-Passwort, Base URL, Benutzerverwaltung und Auditlog
 - Dateiablage für Flyer, Rechnungen, Tech-Rider und Pläne
 - HTML-Testmail und HTML-Einladungsmail
+- Einladungslinks mit Passwort setzen
+- Dateidownload und Dateilöschung
+- iCal-, CSV- und PDF-Export
+- manueller Erinnerungslauf für fällige Aufgaben
 - Backup-Script für PostgreSQL
 
 ## Nächste Ausbaustufen
 
-- iCal-Export für Kalender
-- PDF- und Excel-Export
+- Excel-XLSX-Export zusätzlich zum CSV-Export
 - zeitgesteuerte Erinnerungen per Mail oder Push
+- SMTP-Passwort verschlüsselt speichern

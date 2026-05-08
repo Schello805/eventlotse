@@ -10,9 +10,10 @@ import helmet from 'helmet'
 import jwt from 'jsonwebtoken'
 import multer from 'multer'
 import path from 'node:path'
+import PDFDocument from 'pdfkit'
 import { config } from './config.js'
 import { pool, query, transaction } from './db.js'
-import { createTransport, invitationMail, testMail } from './mail.js'
+import { createTransport, invitationMail, reminderMail, testMail } from './mail.js'
 
 const app = express()
 const distDir = path.join(config.rootDir, 'dist')
@@ -108,6 +109,26 @@ function eventFromRow(row) {
   }
 }
 
+function sanitizeFilename(name) {
+  return String(name || 'datei').replace(/[\r\n"\\/]/g, '_')
+}
+
+function escapeIcs(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;')
+}
+
+function yyyymmdd(date) {
+  return String(date || '').replaceAll('-', '')
+}
+
+function formatIcsDate(date) {
+  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
+}
+
+function csvCell(value) {
+  return `"${String(value || '').replaceAll('"', '""')}"`
+}
+
 app.get('/api/health', (_request, response) => {
   response.json({ ok: true, name: 'Eventlotse', version: process.env.npm_package_version || '0.4.0' })
 })
@@ -143,6 +164,53 @@ app.post('/api/auth/change-password', requireAuth, async (request, response) => 
   await query('UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2', [passwordHash, request.user.id])
   await audit(request.user, 'Passwort wurde geändert.')
   response.json({ ok: true })
+})
+
+app.get('/api/invites/:token', async (request, response) => {
+  const result = await query(
+    `SELECT it.token, it.expires_at, it.used_at, u.email, u.name, e.id AS event_id, e.data
+     FROM invite_tokens it
+     JOIN users u ON u.id = it.user_id
+     LEFT JOIN events e ON e.id = it.event_id
+     WHERE it.token = $1`,
+    [request.params.token],
+  )
+  const invite = result.rows[0]
+  if (!invite || invite.used_at || new Date(invite.expires_at) < new Date()) {
+    return response.status(404).json({ message: 'Einladung ist ungültig oder abgelaufen.' })
+  }
+  response.json({
+    email: invite.email,
+    name: invite.name,
+    event: invite.event_id ? { id: invite.event_id, name: invite.data?.name, date: invite.data?.date, location: invite.data?.location } : null,
+  })
+})
+
+app.post('/api/invites/:token/accept', async (request, response) => {
+  const { password } = request.body || {}
+  if (!password || String(password).length < 10) {
+    return response.status(400).json({ message: 'Bitte ein Passwort mit mindestens 10 Zeichen setzen.' })
+  }
+  const result = await query(
+    `SELECT it.token, it.user_id, it.event_id, it.expires_at, it.used_at, u.email, u.role
+     FROM invite_tokens it
+     JOIN users u ON u.id = it.user_id
+     WHERE it.token = $1`,
+    [request.params.token],
+  )
+  const invite = result.rows[0]
+  if (!invite || invite.used_at || new Date(invite.expires_at) < new Date()) {
+    return response.status(404).json({ message: 'Einladung ist ungültig oder abgelaufen.' })
+  }
+  const passwordHash = await bcrypt.hash(String(password), 12)
+  await transaction(async (client) => {
+    await client.query('UPDATE users SET password_hash = $1, active = true, updated_at = now() WHERE id = $2', [passwordHash, invite.user_id])
+    await client.query('UPDATE invite_tokens SET used_at = now() WHERE token = $1', [invite.token])
+  })
+  const user = { id: invite.user_id, email: invite.email, role: invite.role }
+  await audit(user, 'Einladung wurde angenommen und Passwort gesetzt.')
+  setAuthCookie(response, signToken(user))
+  response.json({ ok: true, user })
 })
 
 app.get('/api/me', requireAuth, (request, response) => {
@@ -220,6 +288,7 @@ app.post('/api/events/:eventId/members', requireAuth, async (request, response) 
   const normalizedEmail = String(email || '').toLowerCase().trim()
   const tempPassword = crypto.randomBytes(9).toString('base64url')
   const passwordHash = await bcrypt.hash(tempPassword, 12)
+  const inviteToken = crypto.randomBytes(32).toString('base64url')
 
   const eventResult = await query('SELECT id, data FROM events WHERE id = $1', [request.params.eventId])
   if (!eventResult.rowCount) return response.status(404).json({ message: 'Event nicht gefunden.' })
@@ -237,6 +306,11 @@ app.post('/api/events/:eventId/members', requireAuth, async (request, response) 
     'INSERT INTO event_members (event_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT (event_id, user_id) DO UPDATE SET role = EXCLUDED.role',
     [request.params.eventId, user.id, role],
   )
+  await query(
+    `INSERT INTO invite_tokens (token, user_id, event_id, expires_at)
+     VALUES ($1, $2, $3, now() + interval '14 days')`,
+    [inviteToken, user.id, request.params.eventId],
+  )
   const updatedEvent = {
     ...event,
     members: [
@@ -247,9 +321,43 @@ app.post('/api/events/:eventId/members', requireAuth, async (request, response) 
   await query('UPDATE events SET data = $1, updated_at = now() WHERE id = $2', [JSON.stringify(updatedEvent), request.params.eventId])
 
   const transport = await createTransport()
-  await transport.sendMail(await invitationMail({ to: normalizedEmail, event: updatedEvent, inviter: request.user.email }))
+  const inviteUrl = `${config.publicBaseUrl}/invite/${inviteToken}`
+  await transport.sendMail(await invitationMail({ to: normalizedEmail, event: updatedEvent, inviter: request.user.email, inviteUrl }))
   await audit(request.user, `Einladung an "${normalizedEmail}" für "${event.name}" wurde versendet.`)
-  response.status(201).json({ user: publicUser(user), event: updatedEvent, initialPassword: config.nodeEnv === 'development' ? tempPassword : undefined })
+  response.status(201).json({ user: publicUser(user), event: updatedEvent, inviteUrl, initialPassword: config.nodeEnv === 'development' ? tempPassword : undefined })
+})
+
+app.get('/api/events/:eventId/files', requireAuth, async (request, response) => {
+  if (!(await canReadEvent(request.user, request.params.eventId))) {
+    return response.status(403).json({ message: 'Du darfst diese Dateien nicht sehen.' })
+  }
+  const result = await query(
+    `SELECT id, task_id, original_name, mime_type, size_bytes, created_at
+     FROM files WHERE event_id = $1 ORDER BY created_at DESC`,
+    [request.params.eventId],
+  )
+  response.json({ files: result.rows })
+})
+
+app.get('/api/files/:fileId/download', requireAuth, async (request, response) => {
+  const result = await query('SELECT * FROM files WHERE id = $1', [request.params.fileId])
+  const file = result.rows[0]
+  if (!file || !(await canReadEvent(request.user, file.event_id))) {
+    return response.status(404).json({ message: 'Datei nicht gefunden.' })
+  }
+  response.download(path.join(config.uploadDir, file.stored_name), sanitizeFilename(file.original_name))
+})
+
+app.delete('/api/files/:fileId', requireAuth, async (request, response) => {
+  const result = await query('SELECT * FROM files WHERE id = $1', [request.params.fileId])
+  const file = result.rows[0]
+  if (!file || !(await canWriteEvent(request.user, file.event_id))) {
+    return response.status(404).json({ message: 'Datei nicht gefunden.' })
+  }
+  await query('DELETE FROM files WHERE id = $1', [file.id])
+  fs.rm(path.join(config.uploadDir, file.stored_name), { force: true }, () => undefined)
+  await audit(request.user, `Datei "${file.original_name}" wurde gelöscht.`)
+  response.json({ ok: true })
 })
 
 app.post('/api/uploads', requireAuth, upload.single('file'), async (request, response) => {
@@ -266,6 +374,79 @@ app.post('/api/uploads', requireAuth, upload.single('file'), async (request, res
   )
   await audit(request.user, `Datei "${file.originalname}" wurde hochgeladen.`)
   response.status(201).json({ file: result.rows[0] })
+})
+
+app.get('/api/events/:eventId/calendar.ics', requireAuth, async (request, response) => {
+  if (!(await canReadEvent(request.user, request.params.eventId))) {
+    return response.status(403).send('Nicht erlaubt')
+  }
+  const eventResult = await query('SELECT id, data FROM events WHERE id = $1', [request.params.eventId])
+  if (!eventResult.rowCount) return response.status(404).send('Nicht gefunden')
+  const event = eventFromRow(eventResult.rows[0])
+  const date = yyyymmdd(event.date)
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Eventlotse//DE',
+    'BEGIN:VEVENT',
+    `UID:${event.id}@eventlotse`,
+    `DTSTAMP:${formatIcsDate(new Date())}`,
+    date ? `DTSTART;VALUE=DATE:${date}` : '',
+    date ? `DTEND;VALUE=DATE:${date}` : '',
+    `SUMMARY:${escapeIcs(event.name)}`,
+    `LOCATION:${escapeIcs(event.location)}`,
+    `DESCRIPTION:${escapeIcs(event.motto)}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].filter(Boolean)
+  response.setHeader('Content-Type', 'text/calendar; charset=utf-8')
+  response.setHeader('Content-Disposition', `attachment; filename="${sanitizeFilename(event.name)}.ics"`)
+  response.send(lines.join('\r\n'))
+})
+
+app.get('/api/events/:eventId/export/tasks.csv', requireAuth, async (request, response) => {
+  if (!(await canReadEvent(request.user, request.params.eventId))) return response.status(403).send('Nicht erlaubt')
+  const eventResult = await query('SELECT id, data FROM events WHERE id = $1', [request.params.eventId])
+  if (!eventResult.rowCount) return response.status(404).send('Nicht gefunden')
+  const event = eventFromRow(eventResult.rows[0])
+  const rows = [['Aktion', 'Aufgabe', 'Status', 'Fällig', 'Notizen']]
+  event.actions?.forEach((action) => action.tasks?.forEach((task) => rows.push([action.title, task.title, task.status, task.due, task.notes])))
+  response.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  response.setHeader('Content-Disposition', `attachment; filename="${sanitizeFilename(event.name)}-aufgaben.csv"`)
+  response.send(rows.map((row) => row.map(csvCell).join(';')).join('\n'))
+})
+
+app.get('/api/events/:eventId/export/runsheet.pdf', requireAuth, async (request, response) => {
+  if (!(await canReadEvent(request.user, request.params.eventId))) return response.status(403).send('Nicht erlaubt')
+  const eventResult = await query('SELECT id, data FROM events WHERE id = $1', [request.params.eventId])
+  if (!eventResult.rowCount) return response.status(404).send('Nicht gefunden')
+  const event = eventFromRow(eventResult.rows[0])
+  const doc = new PDFDocument({ margin: 48, size: 'A4' })
+
+  response.setHeader('Content-Type', 'application/pdf')
+  response.setHeader('Content-Disposition', `attachment; filename="${sanitizeFilename(event.name)}-ablauf.pdf"`)
+  doc.pipe(response)
+  doc.fontSize(22).text(event.name || 'Event', { continued: false })
+  doc.moveDown(0.3)
+  doc.fontSize(11).fillColor('#475569').text(`${event.date || 'Datum offen'} · ${event.location || 'Ort offen'}`)
+  doc.moveDown(1)
+  doc.fillColor('#0f172a').fontSize(16).text('Ablaufplan')
+  doc.moveDown(0.5)
+
+  if (!event.runsheet?.length) {
+    doc.fontSize(11).fillColor('#475569').text('Noch keine Ablaufpunkte hinterlegt.')
+  } else {
+    event.runsheet.forEach((item) => {
+      doc.fillColor('#0f766e').fontSize(12).text(item.time || '--:--', { continued: true, width: 70 })
+      doc.fillColor('#0f172a').fontSize(12).text(`  ${item.title || 'Ablaufpunkt'}`, { continued: true })
+      doc.fillColor('#475569').text(`  ${item.owner || 'offen'}`)
+      doc.moveDown(0.4)
+    })
+  }
+
+  doc.moveDown(1)
+  doc.fillColor('#64748b').fontSize(9).text(`Erstellt mit Eventlotse am ${new Date().toLocaleString('de-DE')}`)
+  doc.end()
 })
 
 app.post('/api/admin/test-mail', requireAuth, requireAdmin, async (request, response) => {
@@ -298,6 +479,30 @@ app.put('/api/admin/settings', requireAuth, requireAdmin, async (request, respon
   )
   await audit(request.user, 'Systemeinstellungen wurden gespeichert.')
   response.json({ settings: { ...next, smtpPass: next.smtpPass ? '********' : '' } })
+})
+
+app.post('/api/admin/reminders/run', requireAuth, requireAdmin, async (request, response) => {
+  const eventsResult = await query('SELECT id, data FROM events ORDER BY updated_at DESC')
+  const today = new Date().toISOString().slice(0, 10)
+  const sent = []
+  const transport = await createTransport()
+
+  for (const row of eventsResult.rows) {
+    const event = eventFromRow(row)
+    const dueTasks = (event.actions || [])
+      .flatMap((action) => action.tasks || [])
+      .filter((task) => task.status !== 'done' && task.due && task.due <= today)
+    if (!dueTasks.length) continue
+
+    const recipients = [...new Set((event.members || []).filter((member) => member.role !== 'Künstler').map((member) => member.email))]
+    for (const to of recipients) {
+      await transport.sendMail(await reminderMail({ to, event, tasks: dueTasks.slice(0, 8) }))
+      sent.push({ event: event.name, to, count: dueTasks.length })
+    }
+  }
+
+  await audit(request.user, `${sent.length} Erinnerungsmails wurden versendet.`)
+  response.json({ sent })
 })
 
 app.use('/uploads', requireAuth, express.static(config.uploadDir))

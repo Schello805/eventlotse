@@ -73,9 +73,8 @@ function baseTemplate({ title, intro, sections, buttonUrl, buttonLabel }) {
   `
 }
 
-export async function invitationMail({ to, event, inviter }) {
+export async function invitationMail({ to, event, inviter, inviteUrl }) {
   const settings = await getMailSettings()
-  const url = `${config.publicBaseUrl}/events/${event.id}`
   return {
     from: settings.from,
     to,
@@ -83,13 +82,14 @@ export async function invitationMail({ to, event, inviter }) {
     html: baseTemplate({
       title: `Du wurdest zu "${event.name}" eingeladen`,
       intro: `${inviter} möchte mit dir dieses Event organisieren.`,
-      buttonUrl: url,
-      buttonLabel: 'Event öffnen',
+      buttonUrl: inviteUrl,
+      buttonLabel: 'Einladung annehmen',
       sections: [
         { label: 'Datum', value: event.date },
         { label: 'Ort', value: event.location },
         { label: 'Motto', value: event.motto },
         { label: 'Gäste grob geschätzt', value: event.guests ? `ca. ${event.guests}` : '' },
+        { label: 'Was du tun sollst', value: 'Klicke auf den Button, setze dein Passwort und öffne danach dein Event.' },
       ],
     }),
   }
@@ -111,6 +111,25 @@ export async function testMail(to) {
         { label: 'SMTP Host', value: config.smtp.host || 'JSON-Testtransport in Entwicklung' },
         { label: 'Zeitpunkt', value: new Date().toLocaleString('de-DE') },
       ],
+    }),
+  }
+}
+
+export async function reminderMail({ to, event, tasks }) {
+  const settings = await getMailSettings()
+  return {
+    from: settings.from,
+    to,
+    subject: `Eventlotse Erinnerung: offene Aufgaben für "${event.name}"`,
+    html: baseTemplate({
+      title: `Offene Aufgaben für "${event.name}"`,
+      intro: 'Diese Aufgaben sind bald fällig oder noch offen.',
+      buttonUrl: `${config.publicBaseUrl}/events/${event.id}`,
+      buttonLabel: 'Event öffnen',
+      sections: tasks.map((task) => ({
+        label: `${task.title} (${task.due || 'ohne Datum'})`,
+        value: task.notes || 'Bitte Status prüfen und bei Bedarf aktualisieren.',
+      })),
     }),
   }
 }

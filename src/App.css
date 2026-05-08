@@ -717,6 +717,13 @@ form {
   margin-bottom: 10px;
 }
 
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
 .section-head h2 {
   margin-bottom: 0;
 }
@@ -1011,6 +1018,38 @@ form {
   position: absolute;
   inset: 0;
   opacity: 0;
+}
+
+.files-panel {
+  margin-top: 16px;
+}
+
+.file-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.file-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #edf1f5;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.file-list strong,
+.file-list small {
+  display: block;
+}
+
+.file-list small {
+  color: #627084;
 }
 
 .lower-grid {
@@ -1386,6 +1425,7 @@ form {
   .profile-grid,
   .template-grid,
   .kanban,
+  .file-list li,
   .hero-stats,
   .home-stats,
   .step-list,
