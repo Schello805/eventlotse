@@ -733,7 +733,8 @@ form {
   padding: 10px;
   text-align: left;
   display: grid;
-  align-content: space-between;
+  align-content: start;
+  gap: 5px;
 }
 
 .template.active {
@@ -743,6 +744,54 @@ form {
 
 .template small {
   color: #627084;
+}
+
+.template em {
+  color: #66758a;
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.35;
+}
+
+.guidance-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+  gap: 14px;
+  align-items: center;
+  border-color: #c7d7fe;
+  background: #f8fbff;
+}
+
+.guidance-panel strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #172033;
+}
+
+.step-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.step-item {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  background: white;
+  color: #415066;
+  text-align: left;
+  font-weight: 700;
+}
+
+.step-item.done {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
 }
 
 .member-list {
@@ -821,6 +870,20 @@ form {
   margin-bottom: 8px;
   font-size: 13px;
   color: #627084;
+}
+
+.lane-empty {
+  min-height: 58px;
+  display: grid;
+  place-items: center;
+  margin: 0 0 8px;
+  padding: 10px;
+  border: 1px dashed #d6dde8;
+  border-radius: 7px;
+  color: #66758a;
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
 }
 
 .task-card {
@@ -1155,6 +1218,7 @@ form {
   .action-grid,
   .lower-grid,
   .setup-grid,
+  .guidance-panel,
   .admin-grid,
   .admin-hero,
   .admin-summary,
@@ -1184,6 +1248,7 @@ form {
   .kanban,
   .hero-stats,
   .home-stats,
+  .step-list,
   .user-create-row,
   .user-row,
   .audit-list li {

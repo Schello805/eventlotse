@@ -10,6 +10,7 @@ import {
   Bell,
   CalendarDays,
   Check,
+  CheckCircle2,
   CircleHelp,
   ClipboardList,
   Clock3,
@@ -134,8 +135,8 @@ type EventTab = 'overview' | 'tasks' | 'team' | 'schedule'
 
 type ToastState = {
   message: string
-  actionLabel: string
-  onAction: () => void
+  actionLabel?: string
+  onAction?: () => void
 } | null
 
 const repoUrl = 'https://github.com/Schello805/eventlotse'
@@ -145,16 +146,16 @@ const usersStorageKey = 'eventlotse.users.v1'
 const auditStorageKey = 'eventlotse.audit.v1'
 
 const actionTemplates = [
-  ['Aufbau', 'Logistik'],
-  ['Abbau', 'Logistik'],
-  ['Musik & Künstler', 'Booking'],
-  ['Flyer & Design', 'Marketing'],
-  ['Einladungen', 'Gäste'],
-  ['Catering', 'Versorgung'],
-  ['GEMA & Genehmigungen', 'Recht'],
-  ['Technik', 'Infrastruktur'],
-  ['Schichtplan', 'Team'],
-  ['Runsheet', 'Ablauf'],
+  { title: 'Aufbau', category: 'Logistik', help: 'Alles, was vor Ort aufgebaut, angeliefert oder vorbereitet werden muss.' },
+  { title: 'Abbau', category: 'Logistik', help: 'Rückbau, Reinigung, Rückgabe und letzte Kontrolle nach der Veranstaltung.' },
+  { title: 'Musik & Künstler', category: 'Booking', help: 'DJs, Bands, Redner oder andere Programmpunkte inklusive Kontakt und Absprachen.' },
+  { title: 'Flyer & Design', category: 'Marketing', help: 'Gestaltung, Freigabe, Druck und Verteilung von Flyern oder digitalen Einladungen.' },
+  { title: 'Einladungen', category: 'Gäste', help: 'Gästeliste, Zu- und Absagen, Zielgruppe und wichtige Hinweise an Gäste.' },
+  { title: 'Catering', category: 'Versorgung', help: 'Essen, Getränke, Einkauf, Ausgabe, Kühlung und Pfand.' },
+  { title: 'GEMA & Genehmigungen', category: 'Recht', help: 'Musiknutzung, Ausschank, Lärm, Genehmigungen und Auflagen.' },
+  { title: 'Technik', category: 'Infrastruktur', help: 'Ton, Licht, Strom, Kabel, Bühne, WLAN und technische Pläne.' },
+  { title: 'Schichtplan', category: 'Team', help: 'Wer hilft wann bei Aufbau, Kasse, Bar, Einlass oder Abbau?' },
+  { title: 'Runsheet', category: 'Ablauf', help: 'Minutengenauer Plan für den Veranstaltungstag.' },
 ]
 
 const infrastructureOptions = [
@@ -276,6 +277,7 @@ function App() {
     ],
   )
   const [session, setSession] = useState({ email: 'admin@example.de', role: 'Admin' as Role })
+  const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(() => {
     const normalizedEvents = events.map(normalizeEvent)
@@ -301,6 +303,10 @@ function App() {
   const updateEvent = (next: EventPlan) => {
     setEvents((current) => current.map((event) => (event.id === next.id ? next : event)))
     addAudit(`Event "${next.name}" wurde aktualisiert.`)
+  }
+
+  const notify = (message: string, actionLabel?: string, onAction?: () => void) => {
+    setToast({ message, actionLabel, onAction })
   }
 
   const addEvent = (data: EventFormValues) => {
@@ -332,6 +338,8 @@ function App() {
           ],
     )
     addAudit(`Event "${next.name}" wurde angelegt.`)
+    notify(`Event "${next.name}" wurde angelegt.`)
+    return next
   }
 
   return (
@@ -370,7 +378,7 @@ function App() {
 
       <main className="workspace dashboard-mode">
         <Routes>
-          <Route path="/" element={<Dashboard events={events} addEvent={addEvent} />} />
+          <Route path="/" element={<Dashboard events={events} addEvent={addEvent} notify={notify} />} />
           <Route
             path="/admin"
             element={
@@ -381,12 +389,13 @@ function App() {
                 setUsers={setAdminUsers}
                 setSettings={setSettings}
                 addAudit={addAudit}
+                notify={notify}
               />
             }
           />
           <Route
             path="/events/:eventId"
-            element={<EventRoute events={events} session={session} updateEvent={updateEvent} />}
+            element={<EventRoute events={events} session={session} updateEvent={updateEvent} notify={notify} />}
           />
           <Route path="/impressum" element={<LegalPage page="impressum" />} />
           <Route path="/datenschutz" element={<LegalPage page="datenschutz" />} />
@@ -396,6 +405,7 @@ function App() {
       </main>
 
       <Footer />
+      {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
     </div>
   )
 }
@@ -403,9 +413,11 @@ function App() {
 function Dashboard({
   events,
   addEvent,
+  notify,
 }: {
   events: EventPlan[]
-  addEvent: (data: EventFormValues) => void
+  addEvent: (data: EventFormValues) => EventPlan
+  notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
   const navigate = useNavigate()
   const eventForm = useForm<EventFormInput, unknown, EventFormValues>({
@@ -426,8 +438,9 @@ function Dashboard({
     0,
   )
   const submitEvent = (data: EventFormValues) => {
-    addEvent(data)
+    const event = addEvent(data)
     eventForm.reset()
+    notify(`Event "${event.name}" ist bereit. Ergänze jetzt Aufgaben oder Team.`, 'Event öffnen', () => navigate(`/events/${event.id}`))
   }
 
   return (
@@ -454,15 +467,34 @@ function Dashboard({
           <summary>Event erstellen</summary>
           <p className="help-text">Diese Basisdaten reichen für die erste Eventkarte. Details wie Team, Infrastruktur und Ablauf ergänzt du später im Event.</p>
           <form onSubmit={eventForm.handleSubmit(submitEvent)}>
-            <input placeholder="Eventname" {...eventForm.register('name')} />
-            {eventForm.formState.errors.name && <small className="form-error">{eventForm.formState.errors.name.message}</small>}
-            <input placeholder="Motto" {...eventForm.register('motto')} />
-            <input placeholder="Zielgruppe" {...eventForm.register('targetGroup')} />
+            <label className="field">
+              <span>Eventname</span>
+              <input placeholder="z.B. Hoffest, Geburtstag, Vereinsabend" {...eventForm.register('name')} />
+              {eventForm.formState.errors.name && <small className="form-error">{eventForm.formState.errors.name.message}</small>}
+            </label>
+            <label className="field">
+              <span>Motto</span>
+              <input placeholder="z.B. Akustikabend im Innenhof" {...eventForm.register('motto')} />
+              <small className="help-text">Optional. Eine kurze Beschreibung reicht völlig.</small>
+            </label>
+            <label className="field">
+              <span>Zielgruppe</span>
+              <input placeholder="z.B. Familie, Freunde, Nachbarschaft" {...eventForm.register('targetGroup')} />
+            </label>
             <div className="two-col">
-              <input type="number" min="0" placeholder="Gäste" {...eventForm.register('guests', { valueAsNumber: true })} />
-              <input type="date" {...eventForm.register('date')} />
+              <label className="field">
+                <span>Gäste grob geschätzt</span>
+                <input type="number" min="0" placeholder="0" {...eventForm.register('guests', { valueAsNumber: true })} />
+              </label>
+              <label className="field">
+                <span>Datum</span>
+                <input type="date" {...eventForm.register('date')} />
+              </label>
             </div>
-            <input placeholder="Ort" {...eventForm.register('location')} />
+            <label className="field">
+              <span>Ort</span>
+              <input placeholder="z.B. Alter Hof, Vereinsheim, Garten" {...eventForm.register('location')} />
+            </label>
             <button className="primary" type="submit"><Plus size={16} /> Anlegen</button>
           </form>
         </details>
@@ -563,10 +595,12 @@ function EventRoute({
   events,
   session,
   updateEvent,
+  notify,
 }: {
   events: EventPlan[]
   session: { email: string; role: Role }
   updateEvent: (event: EventPlan) => void
+  notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
   const { eventId } = useParams()
   const event = events.find((entry) => entry.id === eventId)
@@ -575,7 +609,7 @@ function EventRoute({
     return <Navigate to="/" replace />
   }
 
-  return <EventWorkspace event={event} session={session} updateEvent={updateEvent} />
+  return <EventWorkspace event={event} session={session} updateEvent={updateEvent} notify={notify} />
 }
 
 function MobileSetupPanel({ event }: { event: EventPlan }) {
@@ -616,14 +650,74 @@ function MobileSetupPanel({ event }: { event: EventPlan }) {
   )
 }
 
+function NextSteps({
+  event,
+  isAdmin,
+  setActiveTab,
+}: {
+  event: EventPlan
+  isAdmin: boolean
+  setActiveTab: (tab: EventTab) => void
+}) {
+  const openTasks = event.actions.flatMap((action) => action.tasks).filter((task) => task.status !== 'done').length
+  const steps = [
+    {
+      done: Boolean(event.date && event.location),
+      label: event.date && event.location ? 'Datum und Ort sind gesetzt.' : 'Datum und Ort ergänzen.',
+      tab: 'overview' as EventTab,
+    },
+    {
+      done: event.actions.length > 0,
+      label: event.actions.length > 0 ? `${event.actions.length} Arbeitsbereich(e) angelegt.` : 'Ein bis zwei passende Aktionen auswählen.',
+      tab: 'tasks' as EventTab,
+    },
+    {
+      done: event.members.length > 1,
+      label: event.members.length > 1 ? `${event.members.length} Personen im Team.` : 'Mithelfer per E-Mail hinzufügen.',
+      tab: 'team' as EventTab,
+    },
+    {
+      done: openTasks > 0,
+      label: openTasks > 0 ? `${openTasks} offene Aufgabe(n) sichtbar.` : 'Erste Unteraufgabe anlegen oder vorhandene Aufgabe umbenennen.',
+      tab: 'tasks' as EventTab,
+    },
+  ]
+  const nextOpenStep = steps.find((step) => !step.done)
+
+  if (!isAdmin && !nextOpenStep) return null
+
+  return (
+    <section className="panel guidance-panel" aria-label="Nächste Schritte">
+      <div>
+        <strong>{nextOpenStep ? 'Nächster sinnvoller Schritt' : 'Grundsetup sieht gut aus'}</strong>
+        <p className="help-text">
+          {nextOpenStep
+            ? 'Für kleine Veranstaltungen reichen oft Eventdaten, ein bis zwei Aktionen und eine verantwortliche Person.'
+            : 'Du kannst jetzt Details ergänzen oder direkt mit Aufgaben arbeiten.'}
+        </p>
+      </div>
+      <div className="step-list">
+        {steps.map((step) => (
+          <button className={step.done ? 'step-item done' : 'step-item'} key={step.label} onClick={() => setActiveTab(step.tab)} disabled={!isAdmin && !step.done}>
+            {step.done ? <CheckCircle2 size={16} /> : <CircleHelp size={16} />}
+            <span>{step.label}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function EventWorkspace({
   event,
   session,
   updateEvent,
+  notify,
 }: {
   event: EventPlan
   session: { email: string; role: Role }
   updateEvent: (event: EventPlan) => void
+  notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
   const [newMember, setNewMember] = useState('')
   const [activeTab, setActiveTab] = useState<EventTab>('overview')
@@ -669,6 +763,7 @@ function EventWorkspace({
         },
       ],
     })
+    notify(`Aktion "${title}" wurde hinzugefügt.`)
   }
 
   const addMember = () => {
@@ -686,6 +781,7 @@ function EventWorkspace({
       ],
     })
     setNewMember('')
+    notify(`${newMember.trim()} wurde zum Event-Team hinzugefügt.`)
   }
 
   const exportJson = () => {
@@ -696,6 +792,7 @@ function EventWorkspace({
     link.download = `${event.name.toLowerCase().replaceAll(' ', '-')}-eventlotse.json`
     link.click()
     URL.revokeObjectURL(url)
+    notify('Export wurde erstellt.')
   }
 
   return (
@@ -713,6 +810,8 @@ function EventWorkspace({
           <Stat icon={<ShieldCheck />} label="Rolle" value={session.role} />
         </div>
       </div>
+
+      <NextSteps event={event} isAdmin={isAdmin} setActiveTab={setActiveTab} />
 
       <div className="event-tabs" role="tablist" aria-label="Eventbereiche">
         <button className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>Übersicht</button>
@@ -768,13 +867,14 @@ function EventWorkspace({
             <summary>Aktionen hinzufügen</summary>
             <p className="help-text">Aktionen sind große Arbeitsbereiche wie Aufbau, Musik oder Catering. Du aktivierst nur, was dieses Event wirklich braucht.</p>
             <div className="template-grid">
-              {actionTemplates.map(([title, category]) => {
+              {actionTemplates.map(({ title, category, help }) => {
                 const active = event.actions.some((action) => action.title === title)
                 return (
-                  <button className={active ? 'template active' : 'template'} key={title} onClick={() => addAction(title, category)} disabled={!isAdmin}>
+                  <button className={active ? 'template active' : 'template'} key={title} onClick={() => addAction(title, category)} disabled={!isAdmin} title={help}>
                     <Check size={16} />
                     <span>{title}</span>
                     <small>{category}</small>
+                    <em>{help}</em>
                   </button>
                 )
               })}
@@ -794,6 +894,7 @@ function EventWorkspace({
                   action={action}
                   members={event.members}
                   canEdit={isAdmin || action.owners.some((owner) => owner === currentMember?.id)}
+                  notify={notify}
                   updateAction={(next) =>
                     updateEvent({
                       ...event,
@@ -882,6 +983,7 @@ function AdminPage({
   setUsers,
   setSettings,
   addAudit,
+  notify,
 }: {
   users: AdminUser[]
   settings: AppSettings
@@ -889,6 +991,7 @@ function AdminPage({
   setUsers: (next: AdminUser[] | ((current: AdminUser[]) => AdminUser[])) => void
   setSettings: (next: AppSettings | ((current: AppSettings) => AppSettings)) => void
   addAudit: (action: string) => void
+  notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
   const [toast, setToast] = useState<ToastState>(null)
   const settingsForm = useForm<SettingsFormInput, unknown, SettingsFormValues>({
@@ -913,6 +1016,7 @@ function AdminPage({
       },
     ])
     addAudit(`Benutzer "${data.email}" wurde hinzugefügt.`)
+    notify(`Benutzer "${data.email}" wurde hinzugefügt.`)
     userForm.reset({ name: '', email: '', role: 'Helfer' })
   }
 
@@ -937,11 +1041,13 @@ function AdminPage({
 
   const resetPassword = (user: AdminUser) => {
     addAudit(`Passwort-Reset für "${user.email}" wurde ausgelöst.`)
+    notify(`Passwort-Reset für "${user.email}" wurde vorgemerkt.`)
   }
 
   const saveSettings = (data: SettingsFormValues) => {
     setSettings(data)
     addAudit('Systemeinstellungen wurden gespeichert.')
+    notify('Systemeinstellungen wurden gespeichert.')
   }
 
   return (
@@ -1078,11 +1184,13 @@ function ActionBoard({
   action,
   members,
   canEdit,
+  notify,
   updateAction,
 }: {
   action: ActionCard
   members: Member[]
   canEdit: boolean
+  notify: (message: string, actionLabel?: string, onAction?: () => void) => void
   updateAction: (action: ActionCard) => void
 }) {
   const addTask = () => {
@@ -1102,6 +1210,7 @@ function ActionBoard({
         },
       ],
     })
+    notify(`Unteraufgabe in "${action.title}" wurde angelegt.`)
   }
 
   const moveTask = (task: Task, status: Status) => {
@@ -1124,6 +1233,9 @@ function ActionBoard({
         {(['todo', 'doing', 'done'] as Status[]).map((status) => (
           <div className="lane" key={status}>
             <strong>{statusLabel(status)}</strong>
+            {action.tasks.filter((task) => task.status === status).length === 0 && (
+              <p className="lane-empty">{emptyLaneText(status)}</p>
+            )}
             {action.tasks.filter((task) => task.status === status).map((task) => (
               <div className="task-card" key={task.id}>
                 <input
@@ -1161,6 +1273,7 @@ function ActionBoard({
                           entry.id === task.id ? { ...entry, files: [...entry.files, file.name] } : entry,
                         ),
                       })
+                      notify(`Datei "${file.name}" wurde bei der Aufgabe vermerkt.`)
                     }}
                     disabled={!canEdit}
                   />
@@ -1176,6 +1289,12 @@ function ActionBoard({
 
 function statusLabel(status: Status) {
   return status === 'todo' ? 'Offen' : status === 'doing' ? 'In Arbeit' : 'Erledigt'
+}
+
+function emptyLaneText(status: Status) {
+  if (status === 'todo') return 'Hier landen Aufgaben, die noch gestartet werden sollen.'
+  if (status === 'doing') return 'Ziehe oder stelle Aufgaben hierher, sobald jemand daran arbeitet.'
+  return 'Erledigte Aufgaben erscheinen hier als gemeinsame Fortschrittsanzeige.'
 }
 
 function formatDate(date: string) {
@@ -1290,7 +1409,16 @@ function Toast({ toast, onClose }: { toast: NonNullable<ToastState>; onClose: ()
   return (
     <div className="toast">
       <span>{toast.message}</span>
-      <button onClick={toast.onAction}>{toast.actionLabel}</button>
+      {toast.actionLabel && toast.onAction && (
+        <button
+          onClick={() => {
+            toast.onAction?.()
+            onClose()
+          }}
+        >
+          {toast.actionLabel}
+        </button>
+      )}
       <button className="toast-close" onClick={onClose} aria-label="Meldung schließen"><X size={14} /></button>
     </div>
   )
