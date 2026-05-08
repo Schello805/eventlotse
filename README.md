@@ -10,14 +10,14 @@ Rev. `v0.4.0` ist eine lauffähige Frontend-Version mit lokaler Browser-Speicher
 
 ## Funktionen
 
-- Admin-Login-Demo mit Rollen: Admin, Helfer, Act
+- Lokale Sitzung mit Rollen: Admin, Helfer, Künstler
 - Event-Übersicht mit Event-Steckbrief, Motto, Zielgruppe, Gästezahl und Ort
 - Aktionskatalog mit typischen Event-Bausteinen wie Aufbau, Abbau, Musik, Flyer, Einladungen, Technik, Catering und GEMA
 - Aktionskarten mit Kanban-Unteraufgaben, Status, Verantwortlichen, Deadline und Datei-Merkliste
 - Teamverwaltung per E-Mail
 - Budget-Übersicht für Einnahmen und Ausgaben
 - Infrastruktur-Checkliste
-- Runsheet, Act-Notizen, Wiki und Benachrichtigungsbereich
+- Runsheet, Künstler-/Booking-Notizen, Wiki und Benachrichtigungsbereich
 - JSON-Export
 - Responsives Layout für Smartphone und Desktop
 - Basis-Offline-Cache per Service Worker

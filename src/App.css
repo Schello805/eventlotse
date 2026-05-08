@@ -49,6 +49,13 @@
   font-size: 12px;
 }
 
+.help-text {
+  color: #66758a;
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.45;
+}
+
 .brand-mark {
   width: 30px;
   height: 30px;
@@ -638,6 +645,24 @@ form {
   margin-bottom: 10px;
 }
 
+.section-head h2 {
+  margin-bottom: 0;
+}
+
+.help-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: help;
+  vertical-align: text-bottom;
+}
+
+.help-icon:hover {
+  color: #0f766e;
+}
+
 .profile-grid,
 .template-grid,
 .check-grid {
@@ -657,12 +682,23 @@ form {
   font-weight: 700;
 }
 
+.field .label-row {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
 .field {
   min-width: 0;
 }
 
 .field input {
   width: 100%;
+}
+
+.field .help-text {
+  display: block;
+  margin-top: 4px;
 }
 
 .budget-total {

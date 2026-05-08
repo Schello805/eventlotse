@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
@@ -10,6 +10,7 @@ import {
   Bell,
   CalendarDays,
   Check,
+  CircleHelp,
   ClipboardList,
   Clock3,
   Download,
@@ -39,7 +40,7 @@ import {
 import { useLocalStorage } from './hooks/useLocalStorage'
 import './App.css'
 
-type Role = 'Admin' | 'Helfer' | 'Act'
+type Role = 'Admin' | 'Helfer' | 'Künstler'
 type Status = 'todo' | 'doing' | 'done'
 type LegalPageKey = 'impressum' | 'datenschutz' | 'cookies'
 
@@ -146,7 +147,7 @@ const auditStorageKey = 'eventlotse.audit.v1'
 const actionTemplates = [
   ['Aufbau', 'Logistik'],
   ['Abbau', 'Logistik'],
-  ['Musik & Acts', 'Booking'],
+  ['Musik & Künstler', 'Booking'],
   ['Flyer & Design', 'Marketing'],
   ['Einladungen', 'Gäste'],
   ['Catering', 'Versorgung'],
@@ -198,7 +199,7 @@ const settingsSchema = z.object({
 const userFormSchema = z.object({
   name: z.string().trim().optional(),
   email: z.string().email('Bitte eine gültige E-Mail-Adresse eingeben.'),
-  role: z.enum(['Admin', 'Helfer', 'Act']),
+  role: z.enum(['Admin', 'Helfer', 'Künstler']),
 })
 
 type EventFormValues = z.infer<typeof eventFormSchema>
@@ -210,96 +211,35 @@ type UserFormInput = z.input<typeof userFormSchema>
 
 const uid = () => crypto.randomUUID()
 
-const demoData: EventPlan[] = [
-  {
-    id: uid(),
-    name: 'Sommerfest am See',
-    motto: 'Private Feier mit Live-Musik',
-    targetGroup: 'Freunde, Familie, lokale Acts',
-    guests: 120,
-    date: '2026-07-18',
-    location: 'Bootshaus',
-    mapUrl: 'https://maps.google.com',
-    contact: 'Hausmeister: +49 000 000000',
-    members: [
-      { id: uid(), name: 'Michael', email: 'michael@example.de', role: 'Admin' },
-      { id: uid(), name: 'Lea', email: 'lea@example.de', role: 'Helfer' },
-      { id: uid(), name: 'DJ Nox', email: 'act@example.de', role: 'Act' },
-    ],
-    actions: [],
-    budget: [
-      { id: uid(), label: 'Sponsoring', type: 'income', amount: 900 },
-      { id: uid(), label: 'GEMA', type: 'expense', amount: 160 },
-      { id: uid(), label: 'Flyer-Druck', type: 'expense', amount: 85 },
-    ],
-    infrastructure: ['PA-Anlage', 'Licht', 'GEMA'],
-    runsheet: [
-      { id: uid(), time: '08:00', title: 'Aufbau Technik', owner: 'Lea' },
-      { id: uid(), time: '18:00', title: 'Einlass', owner: 'Michael' },
-      { id: uid(), time: '20:00', title: 'Act 1', owner: 'DJ Nox' },
-    ],
-    actNotes: 'DJ Nox, Gage 450 EUR, Tech-Rider bis 14 Tage vorher bestätigen.',
-    wiki: ['Zapfanlage vor dem Einschalten spülen.', 'Lessons Learned nach dem Event im Wiki sammeln.'],
-  },
-  {
-    id: uid(),
-    name: 'Hofkonzert',
-    motto: 'Akustikabend im Innenhof',
-    targetGroup: 'Nachbarschaft und Freundeskreis',
-    guests: 75,
-    date: '2026-08-22',
-    location: 'Alter Hof',
-    mapUrl: '',
-    contact: 'Anna vor Ort',
-    members: [
-      { id: uid(), name: 'Michael', email: 'michael@example.de', role: 'Admin' },
-      { id: uid(), name: 'Anna', email: 'anna@example.de', role: 'Helfer' },
-    ],
-    actions: [],
-    budget: [
-      { id: uid(), label: 'Spenden', type: 'income', amount: 500 },
-      { id: uid(), label: 'Technik', type: 'expense', amount: 220 },
-    ],
-    infrastructure: ['PA-Anlage', 'Stromplan'],
-    runsheet: [{ id: uid(), time: '16:00', title: 'Soundcheck', owner: 'Anna' }],
-    actNotes: 'Zwei Singer-Songwriter, Ankunft 15:30.',
-    wiki: ['Innenhof ab 22 Uhr leise halten.'],
-  },
-  {
-    id: uid(),
-    name: 'Geburtstag 40',
-    motto: 'Buffet, DJ und Feuerkorb',
-    targetGroup: 'Familie und enge Freunde',
-    guests: 55,
-    date: '2026-09-05',
-    location: 'Scheune West',
-    mapUrl: '',
-    contact: 'Schlüssel bei Thomas',
-    members: [
-      { id: uid(), name: 'Michael', email: 'michael@example.de', role: 'Admin' },
-      { id: uid(), name: 'Tom', email: 'tom@example.de', role: 'Helfer' },
-      { id: uid(), name: 'Mara', email: 'mara@example.de', role: 'Helfer' },
-    ],
-    actions: [],
-    budget: [
-      { id: uid(), label: 'Getränkekasse', type: 'income', amount: 350 },
-      { id: uid(), label: 'Deko', type: 'expense', amount: 90 },
-    ],
-    infrastructure: ['Biertische', 'Bar', 'Parken'],
-    runsheet: [{ id: uid(), time: '12:00', title: 'Deko & Aufbau', owner: 'Mara' }],
-    actNotes: 'DJ optional, Entscheidung bis vier Wochen vorher.',
-    wiki: ['Feuerkorb nur bei gutem Wetter.'],
-  },
-]
+const emptyEvents: EventPlan[] = []
+
+function normalizeRole(role: string): Role {
+  if (role === 'Admin' || role === 'Helfer' || role === 'Künstler') return role
+  return role === 'Act' ? 'Künstler' : 'Helfer'
+}
+
+function normalizeEvent(event: EventPlan): EventPlan {
+  return {
+    ...event,
+    members: event.members.map((member) => ({ ...member, role: normalizeRole(member.role) })),
+  }
+}
+
+function normalizeAdminUser(user: AdminUser): AdminUser {
+  return {
+    ...user,
+    role: normalizeRole(user.role),
+  }
+}
 
 function loadEvents() {
   const raw = localStorage.getItem(storageKey)
-  if (!raw) return demoData
+  if (!raw) return emptyEvents
 
   try {
-    return JSON.parse(raw) as EventPlan[]
+    return (JSON.parse(raw) as EventPlan[]).map(normalizeEvent)
   } catch {
-    return demoData
+    return emptyEvents
   }
 }
 
@@ -311,7 +251,7 @@ function defaultUsers(events: EventPlan[]): AdminUser[] {
         id: member.id,
         name: member.name,
         email: member.email,
-        role: member.role,
+        role: normalizeRole(member.role),
         active: true,
         lastLogin: member.role === 'Admin' ? 'heute' : 'noch nie',
       })
@@ -335,7 +275,21 @@ function App() {
       },
     ],
   )
-  const [session, setSession] = useState({ email: 'michael@example.de', role: 'Admin' as Role })
+  const [session, setSession] = useState({ email: 'admin@example.de', role: 'Admin' as Role })
+
+  useEffect(() => {
+    const normalizedEvents = events.map(normalizeEvent)
+    if (JSON.stringify(normalizedEvents) !== JSON.stringify(events)) {
+      setEvents(normalizedEvents)
+    }
+  }, [events, setEvents])
+
+  useEffect(() => {
+    const normalizedUsers = adminUsers.map(normalizeAdminUser)
+    if (JSON.stringify(normalizedUsers) !== JSON.stringify(adminUsers)) {
+      setAdminUsers(normalizedUsers)
+    }
+  }, [adminUsers, setAdminUsers])
 
   const addAudit = (action: string) => {
     setAuditLog((current) => [
@@ -395,7 +349,7 @@ function App() {
           <Link to="/admin"><Settings size={15} /> Admin</Link>
         </nav>
         <GlobalSearch events={events} />
-        <div className="login-panel" aria-label="Demo Login">
+        <div className="login-panel" aria-label="Lokale Sitzung" title="Lokaler Entwicklungsmodus: Die echte Anmeldung folgt später mit Backend und Datenbank.">
           <Lock size={16} />
           <input
             aria-label="Login E-Mail"
@@ -409,7 +363,7 @@ function App() {
           >
             <option>Admin</option>
             <option>Helfer</option>
-            <option>Act</option>
+            <option>Künstler</option>
           </select>
         </div>
       </header>
@@ -485,6 +439,7 @@ function Dashboard({
           <p>
             Plane Aufbau, Abbau, Booking, Flyer, Budget, Infrastruktur und Runsheet in einer selbst hostbaren App.
           </p>
+          <p className="help-text">Frische Installationen starten leer. Lege zuerst ein Event an, danach öffnet sich der restliche Workflow.</p>
         </div>
         <div className="home-stats" aria-label="Dashboard Kennzahlen">
           <Stat icon={<CalendarDays />} label="Events" value={String(events.length)} />
@@ -497,6 +452,7 @@ function Dashboard({
       <div className="home-layout">
         <details className="panel create-panel accordion-panel" open={events.length === 0}>
           <summary>Event erstellen</summary>
+          <p className="help-text">Diese Basisdaten reichen für die erste Eventkarte. Details wie Team, Infrastruktur und Ablauf ergänzt du später im Event.</p>
           <form onSubmit={eventForm.handleSubmit(submitEvent)}>
             <input placeholder="Eventname" {...eventForm.register('name')} />
             {eventForm.formState.errors.name && <small className="form-error">{eventForm.formState.errors.name.message}</small>}
@@ -515,7 +471,7 @@ function Dashboard({
           <div className="section-head">
             <div>
               <h2>Eventkarten</h2>
-              <p className="muted">Die ersten Karten bleiben ohne Scrollen sichtbar.</p>
+              <p className="help-text">Die Countdown-Farbe zeigt die Dringlichkeit: grün über 30 Tage, gelb 7 bis 30 Tage, rot unter 7 Tage.</p>
             </div>
           </div>
           {events.length === 0 ? (
@@ -636,6 +592,7 @@ function MobileSetupPanel({ event }: { event: EventPlan }) {
         <div>
           <span className="muted">Jetzt wichtig</span>
           <strong>{openTasks.length} offene Aufgaben</strong>
+          <p className="help-text">Reduzierte Ansicht für Aufbau, Abbau oder schlechte Netzverbindung vor Ort.</p>
           <p>{event.location || 'Ort offen'} · {event.contact || 'Kontakt offen'}</p>
         </div>
         <div>
@@ -769,18 +726,22 @@ function EventWorkspace({
           <section className="panel span-2">
             <div className="section-head">
               <h2>Event-Steckbrief</h2>
+              <HelpHint text="Der Steckbrief ist die gemeinsame Orientierung: Motto, Zielgruppe, Lageplan und Kontakt vor Ort." />
               <button className="ghost" onClick={exportJson}><Download size={16} /> Export</button>
             </div>
             <div className="profile-grid">
-              <EditableField label="Motto" value={event.motto} onChange={(motto) => updateEvent({ ...event, motto })} disabled={!isAdmin} />
-              <EditableField label="Zielgruppe" value={event.targetGroup} onChange={(targetGroup) => updateEvent({ ...event, targetGroup })} disabled={!isAdmin} />
-              <EditableField label="Karten-Link" value={event.mapUrl} onChange={(mapUrl) => updateEvent({ ...event, mapUrl })} disabled={!isAdmin} />
-              <EditableField label="Kontakt vor Ort" value={event.contact} onChange={(contact) => updateEvent({ ...event, contact })} disabled={!isAdmin} />
+              <EditableField label="Motto" help="Kurzer Arbeitstitel oder Leitidee, damit alle wissen, worum es geht." value={event.motto} onChange={(motto) => updateEvent({ ...event, motto })} disabled={!isAdmin} />
+              <EditableField label="Zielgruppe" help="Wer soll kommen? Zum Beispiel Familie, Nachbarschaft, Vereinsmitglieder oder eingeladene Gäste." value={event.targetGroup} onChange={(targetGroup) => updateEvent({ ...event, targetGroup })} disabled={!isAdmin} />
+              <EditableField label="Karten-Link" help="Link zu Google Maps, Apple Karten oder einem Lageplan." value={event.mapUrl} onChange={(mapUrl) => updateEvent({ ...event, mapUrl })} disabled={!isAdmin} />
+              <EditableField label="Kontakt vor Ort" help="Person, Telefonnummer oder Hinweis für Schlüssel, Zugang und Strom." value={event.contact} onChange={(contact) => updateEvent({ ...event, contact })} disabled={!isAdmin} />
             </div>
           </section>
 
           <section className="panel">
-            <h2>Budget</h2>
+            <div className="section-head">
+              <h2>Budget</h2>
+              <HelpHint text="Schnelle Übersicht aus Einnahmen minus Ausgaben. Die Detailbearbeitung folgt später." />
+            </div>
             <div className="budget-total">
               <Euro size={18} />
               <strong>{(totals.income - totals.expense).toLocaleString('de-DE')} EUR</strong>
@@ -789,7 +750,10 @@ function EventWorkspace({
           </section>
 
           <section className="panel">
-            <h2>Benachrichtigungen</h2>
+            <div className="section-head">
+              <h2>Benachrichtigungen</h2>
+              <HelpHint text="Noch lokale Hinweise. E-Mail- und Push-Erinnerungen werden mit Backend/SMTP aktiviert." />
+            </div>
             <ul className="notification-list">
               <li><Bell size={15} /> Flyer-Druck 14 Tage vor Event prüfen.</li>
               <li><Clock3 size={15} /> {event.runsheet.length} Ablaufpunkte im Runsheet.</li>
@@ -802,7 +766,7 @@ function EventWorkspace({
         <section className="action-section">
           <details className="panel accordion-panel" open={event.actions.length === 0}>
             <summary>Aktionen hinzufügen</summary>
-            <p className="muted">Diese Startauswahl brauchst du meist nur beim Event-Setup.</p>
+            <p className="help-text">Aktionen sind große Arbeitsbereiche wie Aufbau, Musik oder Catering. Du aktivierst nur, was dieses Event wirklich braucht.</p>
             <div className="template-grid">
               {actionTemplates.map(([title, category]) => {
                 const active = event.actions.some((action) => action.title === title)
@@ -848,6 +812,7 @@ function EventWorkspace({
           <section className="panel">
             <div className="section-head">
               <h2>Team</h2>
+              <HelpHint text="Personen mit Zugriff auf dieses Event. Admins steuern alles, Helfer bearbeiten zugewiesene Aufgaben, Künstler sehen vor allem relevante Ablaufdaten." />
               <Mail size={18} />
             </div>
             <div className="member-list">
@@ -867,7 +832,10 @@ function EventWorkspace({
           </section>
 
           <section className="panel">
-            <h2>Infrastruktur</h2>
+            <div className="section-head">
+              <h2>Infrastruktur</h2>
+              <HelpHint text="Checkliste für Dinge, die vor Ort vorhanden, organisiert oder genehmigt sein müssen." />
+            </div>
             <div className="check-grid">
               {infrastructureOptions.map((item) => (
                 <label key={item}>
@@ -897,9 +865,9 @@ function EventWorkspace({
         <>
           <MobileSetupPanel event={event} />
           <section className="lower-grid">
-            <InfoPanel icon={<ClipboardList />} title="Runsheet" items={event.runsheet.map((item) => `${item.time} · ${item.title} · ${item.owner}`)} emptyText="Noch kein Ablaufplan. Lege die wichtigsten Zeiten für Aufbau, Einlass, Acts und Abbau an." />
-            <InfoPanel icon={<Music />} title="Act-Datenbank" items={event.actNotes ? [event.actNotes] : []} emptyText="Noch keine Acts hinterlegt." />
-            <InfoPanel icon={<FileText />} title="Wiki" items={event.wiki} emptyText="Noch keine Notizen. Sammle hier Lessons Learned, Anleitungen und Protokolle." />
+            <InfoPanel icon={<ClipboardList />} title="Runsheet" help="Minutengenauer Tagesplan: Aufbau, Soundcheck, Einlass, Programmpunkte und Abbau." items={event.runsheet.map((item) => `${item.time} · ${item.title} · ${item.owner}`)} emptyText="Noch kein Ablaufplan. Lege die wichtigsten Zeiten für Aufbau, Einlass, Künstler und Abbau an." />
+            <InfoPanel icon={<Music />} title="Künstler & Booking" help="Früher oft als „Act“ bezeichnet: gemeint sind DJs, Bands, Redner oder andere Programmpunkte." items={event.actNotes ? [event.actNotes] : []} emptyText="Noch keine Künstler oder Programmpunkte hinterlegt." />
+            <InfoPanel icon={<FileText />} title="Wiki" help="Gemeinsames Wissen: Protokolle, Anleitungen, Lessons Learned und wiederkehrende Abläufe." items={event.wiki} emptyText="Noch keine Notizen. Sammle hier Lessons Learned, Anleitungen und Protokolle." />
           </section>
         </>
       )}
@@ -983,6 +951,7 @@ function AdminPage({
           <span className="eyebrow dark"><Settings size={14} /> Administration</span>
           <h1>System, Mail und Benutzer verwalten.</h1>
           <p>Konfiguriere SMTP, Base URL, Benutzerzugänge und prüfe Änderungen im Auditlog.</p>
+          <p className="help-text">Diese Einstellungen brauchst du meist nur beim Setup oder bei Wartung. Deshalb bleiben technische Bereiche als Akkordeon kompakt.</p>
         </div>
         <div className="admin-summary">
           <Stat icon={<Users />} label="Benutzer" value={String(users.length)} />
@@ -994,26 +963,27 @@ function AdminPage({
       <div className="admin-grid">
         <details className="panel admin-panel accordion-panel span-2" open>
           <summary><span>SMTP & Base URL</span><Server size={18} /></summary>
+          <p className="help-text">SMTP ist der Mailserver für spätere Einladungen und Erinnerungen. Die Base URL ist die öffentliche Adresse deiner Installation.</p>
           <form className="admin-form" onSubmit={settingsForm.handleSubmit(saveSettings)}>
             <label className="field">
-              <span>Base URL</span>
+              <span className="label-row">Base URL <HelpHint text="Öffentliche Adresse, unter der Eventlotse später Links in E-Mails erzeugt." /></span>
               <input placeholder="https://eventlotse.example.org" {...settingsForm.register('baseUrl')} />
               {settingsForm.formState.errors.baseUrl && <small className="form-error">{settingsForm.formState.errors.baseUrl.message}</small>}
             </label>
             <label className="field">
-              <span>SMTP Host</span>
+              <span className="label-row">SMTP Host <HelpHint text="Serveradresse deines Mailanbieters, zum Beispiel smtp.example.org." /></span>
               <input placeholder="smtp.example.org" {...settingsForm.register('smtpHost')} />
             </label>
             <label className="field">
-              <span>SMTP Port</span>
+              <span className="label-row">SMTP Port <HelpHint text="Häufig 587 mit TLS/STARTTLS oder 465 für SMTPS." /></span>
               <input type="number" min="1" {...settingsForm.register('smtpPort', { valueAsNumber: true })} />
             </label>
             <label className="field">
-              <span>SMTP Benutzer</span>
+              <span className="label-row">SMTP Benutzer <HelpHint text="Benutzername oder E-Mail-Adresse für den Mailversand." /></span>
               <input placeholder="info@example.org" {...settingsForm.register('smtpUser')} />
             </label>
             <label className="field">
-              <span>Absender</span>
+              <span className="label-row">Absender <HelpHint text="Name und Adresse, die Empfänger später in Einladungen sehen." /></span>
               <input placeholder="Eventlotse <info@example.org>" {...settingsForm.register('smtpFrom')} />
             </label>
             <label className="toggle-field">
@@ -1027,6 +997,7 @@ function AdminPage({
         <section className="panel admin-panel span-2">
           <div className="section-head">
             <h2>Benutzerverwaltung</h2>
+            <HelpHint text="Hier verwaltest du globale Benutzer. Eventzugriff entsteht zusätzlich über die Teamliste im jeweiligen Event." />
             <UserCog size={18} />
           </div>
           <form className="user-create-row" onSubmit={userForm.handleSubmit(addUser)}>
@@ -1038,7 +1009,7 @@ function AdminPage({
             <select {...userForm.register('role')}>
               <option>Admin</option>
               <option>Helfer</option>
-              <option>Act</option>
+              <option>Künstler</option>
             </select>
             <button className="primary" type="submit"><Plus size={16} /> Hinzufügen</button>
           </form>
@@ -1057,7 +1028,7 @@ function AdminPage({
                 <select value={user.role} onChange={(event) => updateUser(user.id, { role: event.target.value as Role })}>
                   <option>Admin</option>
                   <option>Helfer</option>
-                  <option>Act</option>
+                  <option>Künstler</option>
                 </select>
                 <button
                   className={user.active ? 'status-button active' : 'status-button'}
@@ -1084,6 +1055,7 @@ function AdminPage({
         <section className="panel admin-panel span-2">
           <div className="section-head">
             <h2>Auditlog</h2>
+            <HelpHint text="Nachvollziehbare Liste wichtiger Änderungen wie Benutzeraktionen, Passwort-Reset und Systemkonfiguration." />
             <ClipboardList size={18} />
           </div>
           <ul className="audit-list">
@@ -1237,19 +1209,22 @@ function getCountdown(date: string) {
 
 function EditableField({
   label,
+  help,
   value,
   disabled,
   onChange,
 }: {
   label: string
+  help?: string
   value: string
   disabled: boolean
   onChange: (value: string) => void
 }) {
   return (
     <label className="field">
-      <span>{label}</span>
+      <span className="label-row">{label} {help && <HelpHint text={help} />}</span>
       <input value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} />
+      {help && <small className="help-text">{help}</small>}
     </label>
   )
 }
@@ -1267,11 +1242,13 @@ function Stat({ icon, label, value }: { icon: ReactNode; label: string; value: s
 function InfoPanel({
   icon,
   title,
+  help,
   items,
   emptyText = 'Hier erscheinen Inhalte, sobald du sie anlegst.',
 }: {
   icon: ReactNode
   title: string
+  help?: string
   items: string[]
   emptyText?: string
 }) {
@@ -1279,14 +1256,24 @@ function InfoPanel({
     <section className="panel">
       <div className="section-head">
         <h2>{title}</h2>
+        {help && <HelpHint text={help} />}
         {icon}
       </div>
+      {help && <p className="help-text">{help}</p>}
       {items.length === 0 ? <EmptyState title="Noch leer" text={emptyText} /> : (
         <ul className="plain-list">
           {items.map((item) => <li key={item}>{item}</li>)}
         </ul>
       )}
     </section>
+  )
+}
+
+function HelpHint({ text }: { text: string }) {
+  return (
+    <span className="help-icon" title={text} aria-label={text}>
+      <CircleHelp size={14} />
+    </span>
   )
 }
 

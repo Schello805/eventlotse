@@ -50,7 +50,7 @@ server {
 - Backend-API, z.B. Node.js mit Fastify oder NestJS
 - Datenbank, z.B. PostgreSQL
 - Authentifizierung mit sicheren Sessions
-- Rollenmodell: Admin, Helfer, Act
+- Rollenmodell: Admin, Helfer, Künstler
 - Admin-Konfiguration für SMTP, Base URL, Benutzerverwaltung und Auditlog
 - Dateiablage für Flyer, Rechnungen, Tech-Rider und Pläne
 - Mail- oder Push-Benachrichtigungen
