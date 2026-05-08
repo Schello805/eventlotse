@@ -2,7 +2,7 @@
 
 Eventlotse ist eine selbst hostbare Web-App für private Veranstaltungen: Events anlegen, Mithelfer per E-Mail einladen, Aktionen wie Aufbau, Abbau, Musik, Flyer oder Catering aktivieren und die Arbeit danach in Kanban-Unteraufgaben organisieren.
 
-Repository: https://github.com/Schello805/EventStack
+Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
@@ -64,7 +64,7 @@ Auf dem Server ausführen:
 ```bash
 sudo apt-get update
 sudo apt-get install -y git ca-certificates curl
-git clone https://github.com/Schello805/EventStack.git /tmp/eventlotse
+git clone https://github.com/Schello805/eventlotse.git /tmp/eventlotse
 cd /tmp/eventlotse
 sudo SERVER_NAME=deine-domain.de ./scripts/install-ubuntu-24.04.sh
 ```
@@ -85,7 +85,7 @@ Optionale Variablen:
 
 ```bash
 sudo \
-  REPO_URL=https://github.com/Schello805/EventStack.git \
+  REPO_URL=https://github.com/Schello805/eventlotse.git \
   APP_DIR=/opt/eventlotse \
   WEB_ROOT=/var/www/eventlotse \
   SERVER_NAME=deine-domain.de \

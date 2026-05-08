@@ -137,7 +137,7 @@ type ToastState = {
   onAction: () => void
 } | null
 
-const repoUrl = 'https://github.com/Schello805/EventStack'
+const repoUrl = 'https://github.com/Schello805/eventlotse'
 const storageKey = 'eventlotse.workspace.v2'
 const settingsStorageKey = 'eventlotse.settings.v1'
 const usersStorageKey = 'eventlotse.users.v1'

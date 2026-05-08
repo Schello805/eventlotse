@@ -7,7 +7,7 @@ Eventlotse ist aktuell eine statische React-App. Daten werden im Browser gespeic
 ```bash
 sudo apt-get update
 sudo apt-get install -y git ca-certificates curl
-git clone https://github.com/Schello805/EventStack.git /tmp/eventlotse
+git clone https://github.com/Schello805/eventlotse.git /tmp/eventlotse
 cd /tmp/eventlotse
 sudo SERVER_NAME=deine-domain.de ./scripts/install-ubuntu-24.04.sh
 ```

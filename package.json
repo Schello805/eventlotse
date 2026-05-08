@@ -4,10 +4,10 @@
   "version": "0.4.0",
   "description": "Self-hosted planning app for private events, teams, tasks, runsheets, budgets and booking.",
   "license": "PolyForm-Noncommercial-1.0.0",
-  "homepage": "https://github.com/Schello805/EventStack",
+  "homepage": "https://github.com/Schello805/eventlotse",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Schello805/EventStack.git"
+    "url": "https://github.com/Schello805/eventlotse.git"
   },
   "type": "module",
   "scripts": {

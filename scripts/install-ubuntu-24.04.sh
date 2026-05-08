@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/Schello805/EventStack.git}"
+REPO_URL="${REPO_URL:-https://github.com/Schello805/eventlotse.git}"
 APP_DIR="${APP_DIR:-/opt/eventlotse}"
 WEB_ROOT="${WEB_ROOT:-/var/www/eventlotse}"
 SERVER_NAME="${SERVER_NAME:-_}"
