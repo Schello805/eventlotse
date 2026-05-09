@@ -148,6 +148,8 @@ type ToastState = {
   actionLabel?: string
   onAction?: () => void
 } | null
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+type TaskFilter = 'all' | 'open' | 'overdue' | 'mine' | 'unassigned'
 
 const repoUrl = 'https://github.com/Schello805/eventlotse'
 const storageKey = 'eventlotse.workspace.v2'
@@ -297,6 +299,7 @@ function App() {
   const [session, setSession] = useState({ email: 'info@schellenberger.biz', role: 'Helfer' as Role, authenticated: false })
   const [loginPassword, setLoginPassword] = useState('')
   const [toast, setToast] = useState<ToastState>(null)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
 
   useEffect(() => {
     const normalizedEvents = events.map(normalizeEvent)
@@ -343,12 +346,15 @@ function App() {
   const updateEvent = (next: EventPlan) => {
     setEvents((current) => current.map((event) => (event.id === next.id ? next : event)))
     addAudit(`Event "${next.name}" wurde aktualisiert.`)
+    setSaveState('saving')
     fetch(`/api/events/${next.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(next),
-    }).catch(() => undefined)
+    })
+      .then((response) => setSaveState(response.ok ? 'saved' : 'error'))
+      .catch(() => setSaveState('error'))
   }
 
   const notify = (message: string, actionLabel?: string, onAction?: () => void) => {
@@ -475,7 +481,7 @@ function App() {
           />
           <Route
             path="/events/:eventId"
-            element={<EventRoute events={events} session={session} updateEvent={updateEvent} notify={notify} />}
+            element={<EventRoute events={events} session={session} saveState={saveState} updateEvent={updateEvent} notify={notify} />}
           />
           <Route path="/impressum" element={<LegalPage page="impressum" />} />
           <Route path="/datenschutz" element={<LegalPage page="datenschutz" />} />
@@ -518,6 +524,15 @@ function Dashboard({
     (sum, event) => sum + event.actions.flatMap((action) => action.tasks).filter((task) => task.status !== 'done').length,
     0,
   )
+  const eventWarnings = (event: EventPlan) => {
+    const tasks = event.actions.flatMap((action) => action.tasks)
+    const today = new Date().toISOString().slice(0, 10)
+    return [
+      ...(!event.location ? ['Ort fehlt'] : []),
+      ...(tasks.some((task) => task.status !== 'done' && task.due && task.due < today) ? ['Überfällig'] : []),
+      ...(tasks.some((task) => task.status !== 'done' && task.ownerIds.length === 0) ? ['Ohne Verantwortliche'] : []),
+    ]
+  }
   const submitEvent = (data: EventFormValues) => {
     const event = addEvent(data)
     eventForm.reset()
@@ -619,6 +634,11 @@ function Dashboard({
                       <dd>ca. {event.guests}</dd>
                     </div>
                   </dl>
+                  {eventWarnings(event).length > 0 && (
+                    <div className="event-warnings">
+                      {eventWarnings(event).slice(0, 3).map((warning) => <span key={warning}>{warning}</span>)}
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
@@ -813,11 +833,13 @@ function GlobalSearch({ events }: { events: EventPlan[] }) {
 function EventRoute({
   events,
   session,
+  saveState,
   updateEvent,
   notify,
 }: {
   events: EventPlan[]
   session: { email: string; role: Role }
+  saveState: SaveState
   updateEvent: (event: EventPlan) => void
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
@@ -828,7 +850,7 @@ function EventRoute({
     return <Navigate to="/" replace />
   }
 
-  return <EventWorkspace event={event} session={session} updateEvent={updateEvent} notify={notify} />
+  return <EventWorkspace event={event} session={session} saveState={saveState} updateEvent={updateEvent} notify={notify} />
 }
 
 function MobileSetupPanel({ event }: { event: EventPlan }) {
@@ -930,11 +952,13 @@ function NextSteps({
 function EventWorkspace({
   event,
   session,
+  saveState,
   updateEvent,
   notify,
 }: {
   event: EventPlan
   session: { email: string; role: Role }
+  saveState: SaveState
   updateEvent: (event: EventPlan) => void
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
@@ -943,6 +967,7 @@ function EventWorkspace({
   const [runDraft, setRunDraft] = useState({ time: '', title: '', owner: '' })
   const [wikiDraft, setWikiDraft] = useState('')
   const [activeTab, setActiveTab] = useState<EventTab>('overview')
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>('all')
   const [files, setFiles] = useState<StoredFile[]>([])
   const isAdmin = session.role === 'Admin'
   const currentMember = event.members.find((member) => member.email === session.email)
@@ -1097,6 +1122,7 @@ function EventWorkspace({
           <span className="eyebrow"><CalendarDays size={14} /> {event.date || 'Datum offen'}</span>
           <h1>{event.name}</h1>
           <p>{event.motto}</p>
+          <span className={`save-state ${saveState}`}>{saveStateLabel(saveState)}</span>
         </div>
         <div className="hero-stats" aria-label="Event Kennzahlen">
           <Stat icon={<Users />} label="Gäste" value={String(event.guests)} />
@@ -1201,24 +1227,41 @@ function EventWorkspace({
               text="Wähle oben passende Aktionskarten aus. Danach entsteht hier dein Aufgaben-Dashboard."
             />
           ) : (
-            <div className="action-grid">
-              {event.actions.map((action) => (
-                <ActionBoard
-                  key={action.id}
-                  eventId={event.id}
-                  action={action}
-                  members={event.members}
-                  canEdit={isAdmin || action.owners.some((owner) => owner === currentMember?.id)}
-                  notify={notify}
-                  updateAction={(next) =>
-                    updateEvent({
-                      ...event,
-                      actions: event.actions.map((entry) => (entry.id === action.id ? next : entry)),
-                    })
-                  }
-                />
-              ))}
-            </div>
+            <>
+              <div className="task-filter-bar" aria-label="Aufgabenfilter">
+                {([
+                  ['all', 'Alle'],
+                  ['open', 'Offen'],
+                  ['overdue', 'Überfällig'],
+                  ['mine', 'Meine'],
+                  ['unassigned', 'Ohne Verantwortliche'],
+                ] as [TaskFilter, string][]).map(([value, label]) => (
+                  <button key={value} className={taskFilter === value ? 'active' : ''} type="button" onClick={() => setTaskFilter(value)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="action-grid">
+                {event.actions.map((action) => (
+                  <ActionBoard
+                    key={action.id}
+                    eventId={event.id}
+                    action={action}
+                    members={event.members}
+                    currentMemberId={currentMember?.id || ''}
+                    taskFilter={taskFilter}
+                    canEdit={isAdmin || action.owners.some((owner) => owner === currentMember?.id)}
+                    notify={notify}
+                    updateAction={(next) =>
+                      updateEvent({
+                        ...event,
+                        actions: event.actions.map((entry) => (entry.id === action.id ? next : entry)),
+                      })
+                    }
+                  />
+                ))}
+              </div>
+            </>
           )}
           <FileManager files={files} onDelete={deleteFile} />
         </section>
@@ -1667,6 +1710,8 @@ function ActionBoard({
   eventId,
   action,
   members,
+  currentMemberId,
+  taskFilter,
   canEdit,
   notify,
   updateAction,
@@ -1674,10 +1719,20 @@ function ActionBoard({
   eventId: string
   action: ActionCard
   members: Member[]
+  currentMemberId: string
+  taskFilter: TaskFilter
   canEdit: boolean
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
   updateAction: (action: ActionCard) => void
 }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const taskMatchesFilter = (task: Task) => {
+    if (taskFilter === 'open') return task.status !== 'done'
+    if (taskFilter === 'overdue') return task.status !== 'done' && Boolean(task.due) && task.due < today
+    if (taskFilter === 'mine') return Boolean(currentMemberId) && task.ownerIds.includes(currentMemberId)
+    if (taskFilter === 'unassigned') return task.status !== 'done' && task.ownerIds.length === 0
+    return true
+  }
   const addTask = () => {
     updateAction({
       ...action,
@@ -1699,6 +1754,7 @@ function ActionBoard({
   }
 
   const moveTask = (task: Task, status: Status) => {
+    if (task.status === status) return
     updateAction({
       ...action,
       tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, status } : entry)),
@@ -1716,13 +1772,31 @@ function ActionBoard({
       </div>
       <div className="kanban">
         {(['todo', 'doing', 'done'] as Status[]).map((status) => (
-          <div className="lane" key={status}>
+          <div
+            className="lane"
+            key={status}
+            onDragOver={(event) => {
+              if (!canEdit) return
+              event.preventDefault()
+            }}
+            onDrop={(event) => {
+              if (!canEdit) return
+              const taskId = event.dataTransfer.getData('text/plain')
+              const task = action.tasks.find((entry) => entry.id === taskId)
+              if (task) moveTask(task, status)
+            }}
+          >
             <strong>{statusLabel(status)}</strong>
-            {action.tasks.filter((task) => task.status === status).length === 0 && (
+            {action.tasks.filter((task) => task.status === status && taskMatchesFilter(task)).length === 0 && (
               <p className="lane-empty">{emptyLaneText(status)}</p>
             )}
-            {action.tasks.filter((task) => task.status === status).map((task) => (
-              <div className="task-card" key={task.id}>
+            {action.tasks.filter((task) => task.status === status && taskMatchesFilter(task)).map((task) => (
+              <div
+                className="task-card"
+                key={task.id}
+                draggable={canEdit}
+                onDragStart={(event) => event.dataTransfer.setData('text/plain', task.id)}
+              >
                 <input
                   value={task.title}
                   onChange={(change) =>
@@ -1733,47 +1807,53 @@ function ActionBoard({
                   }
                   disabled={!canEdit}
                 />
-                <small>Fällig: {task.due || 'offen'}</small>
-                <input
-                  type="date"
-                  value={task.due}
-                  onChange={(change) =>
-                    updateAction({
-                      ...action,
-                      tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, due: change.target.value } : entry)),
-                    })
-                  }
-                  disabled={!canEdit}
-                />
-                <select
-                  value={task.ownerIds[0] || ''}
-                  onChange={(change) =>
-                    updateAction({
-                      ...action,
-                      tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, ownerIds: change.target.value ? [change.target.value] : [] } : entry)),
-                    })
-                  }
-                  disabled={!canEdit}
-                >
-                  <option value="">Verantwortlich offen</option>
-                  {members.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}
-                </select>
-                <select value={task.status} onChange={(change) => moveTask(task, change.target.value as Status)} disabled={!canEdit}>
-                  <option value="todo">Offen</option>
-                  <option value="doing">In Arbeit</option>
-                  <option value="done">Erledigt</option>
-                </select>
-                <textarea
-                  value={task.notes}
-                  onChange={(change) =>
-                    updateAction({
-                      ...action,
-                      tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, notes: change.target.value } : entry)),
-                    })
-                  }
-                  placeholder="Notizen, Absprachen oder Einkaufsliste..."
-                  disabled={!canEdit}
-                />
+                <div className="task-meta-row">
+                  <small>Fällig: {task.due || 'offen'}</small>
+                  <small>{members.find((member) => member.id === task.ownerIds[0])?.name || 'ohne Verantwortliche'}</small>
+                </div>
+                <details className="task-details">
+                  <summary>Details bearbeiten</summary>
+                  <input
+                    type="date"
+                    value={task.due}
+                    onChange={(change) =>
+                      updateAction({
+                        ...action,
+                        tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, due: change.target.value } : entry)),
+                      })
+                    }
+                    disabled={!canEdit}
+                  />
+                  <select
+                    value={task.ownerIds[0] || ''}
+                    onChange={(change) =>
+                      updateAction({
+                        ...action,
+                        tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, ownerIds: change.target.value ? [change.target.value] : [] } : entry)),
+                      })
+                    }
+                    disabled={!canEdit}
+                  >
+                    <option value="">Verantwortlich offen</option>
+                    {members.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}
+                  </select>
+                  <select value={task.status} onChange={(change) => moveTask(task, change.target.value as Status)} disabled={!canEdit}>
+                    <option value="todo">Offen</option>
+                    <option value="doing">In Arbeit</option>
+                    <option value="done">Erledigt</option>
+                  </select>
+                  <textarea
+                    value={task.notes}
+                    onChange={(change) =>
+                      updateAction({
+                        ...action,
+                        tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, notes: change.target.value } : entry)),
+                      })
+                    }
+                    placeholder="Notizen, Absprachen oder Einkaufsliste..."
+                    disabled={!canEdit}
+                  />
+                </details>
                 <div className="owner-row">
                   {members.slice(0, 4).map((member) => (
                     <span className="avatar" title={member.email} key={member.id}>{member.name.slice(0, 2).toUpperCase()}</span>
@@ -1849,6 +1929,13 @@ function statusLabel(status: Status) {
   return status === 'todo' ? 'Offen' : status === 'doing' ? 'In Arbeit' : 'Erledigt'
 }
 
+function saveStateLabel(state: SaveState) {
+  if (state === 'saving') return 'Speichert...'
+  if (state === 'saved') return 'Gespeichert'
+  if (state === 'error') return 'Speichern fehlgeschlagen'
+  return 'Bereit'
+}
+
 function emptyLaneText(status: Status) {
   if (status === 'todo') return 'Hier landen Aufgaben, die noch gestartet werden sollen.'
   if (status === 'doing') return 'Ziehe oder stelle Aufgaben hierher, sobald jemand daran arbeitet.'
@@ -1899,7 +1986,7 @@ function EditableField({
 }) {
   return (
     <label className="field">
-      <span className="label-row">{label} {help && <HelpHint text={help} />}</span>
+      <span className="label-row">{label}</span>
       <input value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} />
       {help && <small className="help-text">{help}</small>}
     </label>
@@ -1933,7 +2020,6 @@ function InfoPanel({
     <section className="panel">
       <div className="section-head">
         <h2>{title}</h2>
-        {help && <HelpHint text={help} />}
         {icon}
       </div>
       {help && <p className="help-text">{help}</p>}
