@@ -20,6 +20,7 @@ import { mergeAppSettings, sanitizeAppSettings } from './settings.js'
 
 const app = express()
 const distDir = path.join(config.rootDir, 'dist')
+const packageJson = JSON.parse(fs.readFileSync(path.join(config.rootDir, 'package.json'), 'utf8'))
 const upload = multer({
   dest: config.uploadDir,
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -189,7 +190,12 @@ function scheduleReminderWorker() {
 }
 
 app.get('/api/health', (_request, response) => {
-  response.json({ ok: true, name: 'Eventlotse', version: process.env.npm_package_version || '0.4.0' })
+  response.json({ ok: true, name: 'Eventlotse', version: packageJson.version })
+})
+
+app.get('/version.json', (_request, response) => {
+  response.setHeader('Cache-Control', 'no-store, max-age=0')
+  response.json({ name: 'Eventlotse', version: packageJson.version })
 })
 
 app.post('/api/auth/login', async (request, response) => {

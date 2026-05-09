@@ -166,6 +166,8 @@ SERVICE
 
 restart_and_check() {
   load_env
+  local expected_version
+  expected_version="$(node -p "require('${APP_DIR}/package.json').version")"
   log "Starte Eventlotse neu."
   systemctl restart eventlotse
   systemctl is-active --quiet eventlotse
@@ -173,16 +175,27 @@ restart_and_check() {
   local health_url="http://${HOST:-127.0.0.1}:${PORT:-$APP_PORT}/api/health"
   log "Prüfe Healthcheck ${health_url}."
   for _ in $(seq 1 "$HEALTH_TIMEOUT"); do
-    if curl -fs "$health_url" >/dev/null; then
-      log "Eventlotse läuft."
+    local health_response
+    health_response="$(curl -fs "$health_url" 2>/dev/null || true)"
+    if [[ "$health_response" == *"\"version\":\"${expected_version}\""* ]]; then
+      log "Eventlotse läuft mit Version ${expected_version}."
       return
     fi
     sleep 1
   done
 
-  echo "Eventlotse antwortet nach ${HEALTH_TIMEOUT}s nicht auf den Healthcheck." >&2
+  echo "Eventlotse antwortet nach ${HEALTH_TIMEOUT}s nicht mit Version ${expected_version}." >&2
   journalctl -u eventlotse -n 80 --no-pager >&2 || true
   exit 1
+}
+
+verify_dist_version() {
+  local expected_version
+  expected_version="$(node -p "require('${APP_DIR}/package.json').version")"
+  if ! grep -R "${expected_version}" "$APP_DIR/dist/assets" >/dev/null 2>&1; then
+    echo "Der gebaute Frontend-Bundle enthält Version ${expected_version} nicht." >&2
+    exit 1
+  fi
 }
 
 main() {
@@ -211,6 +224,7 @@ main() {
   load_env
   npm run db:migrate
   npm run build
+  verify_dist_version
   npm prune --omit=dev
 
   install -d -m 0750 -o www-data -g www-data "${UPLOAD_DIR:-/var/lib/eventlotse/uploads}"
