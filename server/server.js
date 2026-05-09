@@ -348,6 +348,9 @@ app.get('/api/bootstrap', requireAuth, async (request, response) => {
     events: eventsResult.rows.map(eventFromRow),
     settings: settings ? sanitizeAppSettings(settings) : null,
     templates: appSettings.eventTemplates,
+    permissions: {
+      canCreateEvents: request.user.role === 'Admin' || appSettings.allowUserEventCreation,
+    },
     users,
     auditLog,
   })
@@ -359,6 +362,10 @@ app.get('/api/templates', requireAuth, async (_request, response) => {
 })
 
 app.post('/api/events', requireAuth, async (request, response) => {
+  const settings = mergeAppSettings(await loadStoredSettings())
+  if (request.user.role !== 'Admin' && !settings.allowUserEventCreation) {
+    return response.status(403).json({ message: 'Nur Admins dürfen neue Events erstellen.' })
+  }
   const event = request.body
   const result = await transaction(async (client) => {
     const inserted = await client.query(

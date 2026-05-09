@@ -6,7 +6,7 @@ Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.14` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.4.15` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
@@ -27,6 +27,7 @@ Rev. `v0.4.14` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 - Adminseite für SMTP-Konfiguration, Base URL, Benutzerverwaltung, Passwort-Reset, Deaktivierung, Löschen und Auditlog
 - SMTP-Testmail direkt aus der Adminseite inklusive SMTP-Passwort/App-Passwort
 - Adminbereich nur nach Admin-Login sichtbar
+- optionale Admin-Einstellung, ob alle angemeldeten Nutzer oder nur Admins neue Events erstellen dürfen
 - eigenes Admin-Passwort direkt in der Adminseite ändern
 - sichere Einladungslinks mit Passwort setzen
 - Dateiliste mit Download und Löschen pro Event

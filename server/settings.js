@@ -27,6 +27,7 @@ export function appSettingsFromEnv() {
     smtpPass: config.smtp.pass ? encryptSecret(config.smtp.pass) : '',
     smtpFrom: config.smtp.from,
     smtpTls: !config.smtp.secure,
+    allowUserEventCreation: false,
     eventTemplates: defaultEventTemplates,
   }
 }
@@ -80,6 +81,7 @@ export function mergeAppSettings(stored = {}) {
     smtpPass: stored.smtpPass && stored.smtpPass !== '********' ? stored.smtpPass : env.smtpPass,
     smtpFrom: !isPlaceholderValue(stored.smtpFrom) ? stored.smtpFrom : env.smtpFrom,
     smtpTls: typeof stored.smtpTls === 'boolean' ? stored.smtpTls : env.smtpTls,
+    allowUserEventCreation: stored.allowUserEventCreation === true,
     eventTemplates: normalizeEventTemplates(stored.eventTemplates || env.eventTemplates),
   }
 }

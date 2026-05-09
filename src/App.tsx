@@ -140,6 +140,7 @@ type AppSettings = {
   smtpPass?: string
   smtpFrom: string
   smtpTls: boolean
+  allowUserEventCreation: boolean
   eventTemplates: EventTemplate[]
 }
 
@@ -289,6 +290,7 @@ const defaultSettings: AppSettings = {
   smtpPass: '',
   smtpFrom: 'Eventlotse <info@example.org>',
   smtpTls: true,
+  allowUserEventCreation: false,
   eventTemplates: builtInEventTemplates,
 }
 
@@ -310,6 +312,7 @@ const settingsSchema = z.object({
   smtpPass: z.string().optional(),
   smtpFrom: z.string().trim().min(1, 'Absender fehlt.'),
   smtpTls: z.boolean().default(true),
+  allowUserEventCreation: z.boolean().default(false),
 })
 
 const userFormSchema = z.object({
@@ -439,6 +442,7 @@ function App() {
     ],
   )
   const [session, setSession] = useState({ email: 'info@schellenberger.biz', role: 'Helfer' as Role, authenticated: false })
+  const [canCreateEvents, setCanCreateEvents] = useState(false)
   const [loginPassword, setLoginPassword] = useState('')
   const [toast, setToast] = useState<ToastState>(null)
   const [saveState, setSaveState] = useState<SaveState>('idle')
@@ -465,6 +469,7 @@ function App() {
     if (Array.isArray(data.users)) setAdminUsers(data.users.map(normalizeAdminUser))
     if (data.settings) setSettings({ ...defaultSettings, ...data.settings, eventTemplates: normalizeTemplates(data.settings.eventTemplates) })
     if (Array.isArray(data.templates)) setEventTemplates(normalizeTemplates(data.templates))
+    setCanCreateEvents(Boolean(data.permissions?.canCreateEvents))
     if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog)
   }, [setAdminUsers, setAuditLog, setEventTemplates, setEvents, setSettings])
 
@@ -539,6 +544,7 @@ function App() {
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined)
     setSession({ email: 'info@schellenberger.biz', role: 'Helfer', authenticated: false })
+    setCanCreateEvents(false)
     notify('Du bist abgemeldet.')
   }
 
@@ -546,6 +552,10 @@ function App() {
     if (!session.authenticated) {
       notify('Bitte melde dich an, bevor du ein Event anlegst.')
       throw new Error('Login erforderlich.')
+    }
+    if (!canCreateEvents) {
+      notify('Nur Admins dürfen neue Events erstellen.')
+      throw new Error('Keine Berechtigung.')
     }
     const template = eventTemplates.find((entry) => entry.id === data.templateId)
     const next: EventPlan = {
@@ -640,7 +650,7 @@ function App() {
 
       <main className="workspace dashboard-mode">
         <Routes>
-          <Route path="/" element={<Dashboard events={events} templates={eventTemplates} session={session} addEvent={addEvent} notify={notify} />} />
+          <Route path="/" element={<Dashboard events={events} templates={eventTemplates} session={session} canCreateEvents={canCreateEvents} addEvent={addEvent} notify={notify} />} />
           <Route
             path="/admin"
             element={
@@ -685,12 +695,14 @@ function Dashboard({
   events,
   templates,
   session,
+  canCreateEvents,
   addEvent,
   notify,
 }: {
   events: EventPlan[]
   templates: EventTemplate[]
   session: { email: string; role: Role; authenticated: boolean }
+  canCreateEvents: boolean
   addEvent: (data: EventFormValues) => EventPlan
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
@@ -759,11 +771,15 @@ function Dashboard({
             <h2>Event erstellen</h2>
             <HelpHint text="Dieses Formular bleibt bewusst immer sichtbar, damit du jederzeit schnell ein neues Event anlegen kannst." />
           </div>
-          <p className="help-text">Diese Basisdaten reichen für die erste Eventkarte. Details wie Team, Infrastruktur und Ablauf ergänzt du später im Event.</p>
-          <form onSubmit={eventForm.handleSubmit(submitEvent)}>
+          {canCreateEvents ? (
+            <p className="help-text">Diese Basisdaten reichen für die erste Eventkarte. Details wie Team, Infrastruktur und Ablauf ergänzt du später im Event.</p>
+          ) : (
+            <p className="help-text">Dein Konto darf aktuell keine neuen Events erstellen. Ein Admin kann dich zu Events einladen oder die Erstellung im Adminbereich freischalten.</p>
+          )}
+          <form onSubmit={eventForm.handleSubmit(submitEvent)} aria-disabled={!canCreateEvents}>
             <label className="field">
               <span>Vorlage</span>
-              <select {...eventForm.register('templateId')}>
+              <select {...eventForm.register('templateId')} disabled={!canCreateEvents}>
                 <option value="">Ohne Vorlage starten</option>
                 {templates.map((template) => (
                   <option value={template.id} key={template.id}>{template.name}</option>
@@ -773,33 +789,33 @@ function Dashboard({
             </label>
             <label className="field">
               <span>Eventname</span>
-              <input placeholder="z.B. Hoffest, Geburtstag, Vereinsabend" {...eventForm.register('name')} />
+              <input placeholder="z.B. Hoffest, Geburtstag, Vereinsabend" disabled={!canCreateEvents} {...eventForm.register('name')} />
               {eventForm.formState.errors.name && <small className="form-error">{eventForm.formState.errors.name.message}</small>}
             </label>
             <label className="field">
               <span>Motto</span>
-              <input placeholder="z.B. Akustikabend im Innenhof" {...eventForm.register('motto')} />
+              <input placeholder="z.B. Akustikabend im Innenhof" disabled={!canCreateEvents} {...eventForm.register('motto')} />
               <small className="help-text">Optional. Eine kurze Beschreibung reicht völlig.</small>
             </label>
             <label className="field">
               <span>Zielgruppe</span>
-              <input placeholder="z.B. Familie, Freunde, Nachbarschaft" {...eventForm.register('targetGroup')} />
+              <input placeholder="z.B. Familie, Freunde, Nachbarschaft" disabled={!canCreateEvents} {...eventForm.register('targetGroup')} />
             </label>
             <div className="two-col">
               <label className="field">
                 <span>Gäste grob geschätzt</span>
-                <input type="number" min="0" placeholder="0" {...eventForm.register('guests', { valueAsNumber: true })} />
+                <input type="number" min="0" placeholder="0" disabled={!canCreateEvents} {...eventForm.register('guests', { valueAsNumber: true })} />
               </label>
               <label className="field">
                 <span>Datum</span>
-                <input type="date" {...eventForm.register('date')} />
+                <input type="date" disabled={!canCreateEvents} {...eventForm.register('date')} />
               </label>
             </div>
             <label className="field">
               <span>Ort</span>
-              <input placeholder="z.B. Alter Hof, Vereinsheim, Garten" {...eventForm.register('location')} />
+              <input placeholder="z.B. Alter Hof, Vereinsheim, Garten" disabled={!canCreateEvents} {...eventForm.register('location')} />
             </label>
-            <button className="primary" type="submit"><Plus size={16} /> Anlegen</button>
+            <button className="primary" type="submit" disabled={!canCreateEvents}><Plus size={16} /> Anlegen</button>
           </form>
         </section>
 
@@ -2011,6 +2027,10 @@ function AdminPage({
             <label className="toggle-field">
               <input type="checkbox" {...settingsForm.register('smtpTls')} />
               TLS aktivieren
+            </label>
+            <label className="toggle-field">
+              <input type="checkbox" {...settingsForm.register('allowUserEventCreation')} />
+              Alle angemeldeten Nutzer dürfen Events erstellen
             </label>
             <button className="primary" type="submit"><Save size={16} /> Speichern</button>
           </form>
