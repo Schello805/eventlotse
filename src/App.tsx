@@ -8,6 +8,7 @@ import { differenceInCalendarDays, format, isValid, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
 import {
   Bell,
+  Archive,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -98,6 +99,7 @@ type EventPlan = {
   mapUrl: string
   contact: string
   photoUrl: string
+  archived: boolean
   members: Member[]
   actions: ActionCard[]
   budget: BudgetLine[]
@@ -239,6 +241,7 @@ function normalizeEvent(event: EventPlan): EventPlan {
   return {
     ...event,
     photoUrl: event.photoUrl || '',
+    archived: Boolean(event.archived),
     members: event.members.map((member) => ({ ...member, role: normalizeRole(member.role) })),
   }
 }
@@ -359,6 +362,19 @@ function App() {
       .catch(() => setSaveState('error'))
   }
 
+  const deleteEvent = async (eventId: string) => {
+    const event = events.find((entry) => entry.id === eventId)
+    if (!event) return
+    const response = await fetch(`/api/events/${eventId}`, { method: 'DELETE', credentials: 'include' }).catch(() => null)
+    if (!response?.ok) {
+      notify('Event konnte nicht gelöscht werden.')
+      return
+    }
+    setEvents((current) => current.filter((entry) => entry.id !== eventId))
+    addAudit(`Event "${event.name}" wurde gelöscht.`)
+    notify(`Event "${event.name}" wurde gelöscht.`)
+  }
+
   const notify = (message: string, actionLabel?: string, onAction?: () => void) => {
     setToast({ message, actionLabel, onAction })
   }
@@ -404,6 +420,7 @@ function App() {
       mapUrl: '',
       contact: '',
       photoUrl: '',
+      archived: false,
       members: [{ id: uid(), name: 'Michael', email: session.email, role: 'Admin' }],
       actions: [],
       budget: [],
@@ -451,6 +468,7 @@ function App() {
         </Link>
         <nav className="app-nav" aria-label="Hauptnavigation">
           <Link to="/"><LayoutDashboard size={15} /> Dashboard</Link>
+          {session.authenticated && <Link to="/profil"><UserCog size={15} /> Profil</Link>}
           {session.authenticated && session.role === 'Admin' && <Link to="/admin"><Settings size={15} /> Admin</Link>}
         </nav>
         <GlobalSearch events={session.authenticated ? events : []} />
@@ -488,8 +506,9 @@ function App() {
           />
           <Route
             path="/events/:eventId"
-            element={<EventRoute events={events} session={session} saveState={saveState} updateEvent={updateEvent} notify={notify} />}
+            element={<EventRoute events={events} session={session} saveState={saveState} updateEvent={updateEvent} deleteEvent={deleteEvent} notify={notify} />}
           />
+          <Route path="/profil" element={session.authenticated ? <ProfilePage session={session} notify={notify} /> : <LoginRequired />} />
           <Route path="/impressum" element={<LegalPage page="impressum" />} />
           <Route path="/datenschutz" element={<LegalPage page="datenschutz" />} />
           <Route path="/cookies" element={<LegalPage page="cookies" />} />
@@ -529,7 +548,9 @@ function Dashboard({
   })
   const userCount = new Set(events.flatMap((event) => event.members.map((member) => member.email))).size
   const locationCount = new Set(events.map((event) => event.location).filter(Boolean)).size
-  const openTasks = events.reduce(
+  const activeEvents = events.filter((event) => !event.archived)
+  const archivedEvents = events.filter((event) => event.archived)
+  const openTasks = activeEvents.reduce(
     (sum, event) => sum + event.actions.flatMap((action) => action.tasks).filter((task) => task.status !== 'done').length,
     0,
   )
@@ -564,7 +585,7 @@ function Dashboard({
           <p className="help-text">Frische Installationen starten leer. Lege zuerst ein Event an, danach öffnet sich der restliche Workflow.</p>
         </div>
         <div className="home-stats" aria-label="Dashboard Kennzahlen">
-          <Stat icon={<CalendarDays />} label="Events" value={String(events.length)} />
+          <Stat icon={<CalendarDays />} label="Events" value={String(activeEvents.length)} />
           <Stat icon={<Users />} label="Nutzer" value={String(userCount)} />
           <Stat icon={<MapPin />} label="Orte" value={String(locationCount)} />
           <Stat icon={<KanbanSquare />} label="Offene Aufgaben" value={String(openTasks)} />
@@ -618,14 +639,14 @@ function Dashboard({
               <p className="help-text">Die Countdown-Farbe zeigt die Dringlichkeit: grün über 30 Tage, gelb 7 bis 30 Tage, rot unter 7 Tage.</p>
             </div>
           </div>
-          {events.length === 0 ? (
+          {activeEvents.length === 0 ? (
             <EmptyState
               title="Noch keine Events"
               text="Lege dein erstes Event links im Akkordeon an. Danach erscheinen hier die Arbeitskarten."
             />
           ) : (
             <div className="event-card-grid">
-              {events.map((event) => (
+              {activeEvents.map((event) => (
                 <button className="event-card" key={event.id} onClick={() => navigate(`/events/${event.id}`)}>
                   <div className="event-card-topline">
                     <span className="event-date">{formatDate(event.date)}</span>
@@ -655,6 +676,19 @@ function Dashboard({
                 </button>
               ))}
             </div>
+          )}
+          {archivedEvents.length > 0 && (
+            <details className="archive-box">
+              <summary><Archive size={16} /> Archivierte Events ({archivedEvents.length})</summary>
+              <div className="event-card-grid compact">
+                {archivedEvents.map((event) => (
+                  <button className="event-card archived" key={event.id} onClick={() => navigate(`/events/${event.id}`)}>
+                    <strong>{event.name}</strong>
+                    <span>{formatDate(event.date)} · {event.location || 'Ort offen'}</span>
+                  </button>
+                ))}
+              </div>
+            </details>
           )}
         </section>
       </div>
@@ -746,6 +780,81 @@ function LoginRequired() {
         <div><Users size={18} /><strong>Team</strong><span>Einladungen, Rollen und Zugriff pro Event.</span></div>
         <div><Clock3 size={18} /><strong>Ablauf</strong><span>Runsheet, Aufbau, Abbau und Programmpunkte.</span></div>
         <div><ShieldCheck size={18} /><strong>Self-Hosting</strong><span>PostgreSQL, Auditlog, SMTP und eigene Domain.</span></div>
+      </div>
+    </section>
+  )
+}
+
+function ProfilePage({
+  session,
+  notify,
+}: {
+  session: { email: string; role: Role; authenticated: boolean }
+  notify: (message: string, actionLabel?: string, onAction?: () => void) => void
+}) {
+  const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' })
+
+  const changePassword = async () => {
+    if (passwordDraft.newPassword !== passwordDraft.repeatPassword) {
+      notify('Die neuen Passwörter stimmen nicht überein.')
+      return
+    }
+    try {
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          currentPassword: passwordDraft.currentPassword,
+          newPassword: passwordDraft.newPassword,
+        }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.message || 'Passwort konnte nicht geändert werden.')
+      setPasswordDraft({ currentPassword: '', newPassword: '', repeatPassword: '' })
+      notify('Passwort wurde geändert.')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Passwort konnte nicht geändert werden.')
+    }
+  }
+
+  return (
+    <section className="profile-page">
+      <div className="panel">
+        <div className="section-head">
+          <div>
+            <h2>Profil</h2>
+            <p className="help-text">Dein persönlicher Zugang zu Eventlotse.</p>
+          </div>
+          <UserCog size={18} />
+        </div>
+        <div className="profile-summary">
+          <span>E-Mail</span>
+          <strong>{session.email}</strong>
+          <span>Rolle</span>
+          <strong>{session.role}</strong>
+        </div>
+      </div>
+      <div className="panel">
+        <div className="section-head">
+          <h2>Passwort ändern</h2>
+          <Lock size={18} />
+        </div>
+        <div className="admin-form">
+          <label className="field">
+            <span>Aktuelles Passwort</span>
+            <input type="password" value={passwordDraft.currentPassword} onChange={(event) => setPasswordDraft({ ...passwordDraft, currentPassword: event.target.value })} />
+          </label>
+          <label className="field">
+            <span>Neues Passwort</span>
+            <input type="password" value={passwordDraft.newPassword} onChange={(event) => setPasswordDraft({ ...passwordDraft, newPassword: event.target.value })} />
+          </label>
+          <label className="field">
+            <span>Neues Passwort wiederholen</span>
+            <input type="password" value={passwordDraft.repeatPassword} onChange={(event) => setPasswordDraft({ ...passwordDraft, repeatPassword: event.target.value })} />
+          </label>
+          <button className="primary" type="button" onClick={changePassword}><Save size={16} /> Passwort speichern</button>
+        </div>
       </div>
     </section>
   )
@@ -867,12 +976,14 @@ function EventRoute({
   session,
   saveState,
   updateEvent,
+  deleteEvent,
   notify,
 }: {
   events: EventPlan[]
   session: { email: string; role: Role; authenticated: boolean }
   saveState: SaveState
   updateEvent: (event: EventPlan) => void
+  deleteEvent: (eventId: string) => void
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
   const { eventId } = useParams()
@@ -885,7 +996,7 @@ function EventRoute({
     return <Navigate to="/" replace />
   }
 
-  return <EventWorkspace event={event} session={session} saveState={saveState} updateEvent={updateEvent} notify={notify} />
+  return <EventWorkspace event={event} session={session} saveState={saveState} updateEvent={updateEvent} deleteEvent={deleteEvent} notify={notify} />
 }
 
 function MobileSetupPanel({ event }: { event: EventPlan }) {
@@ -989,12 +1100,14 @@ function EventWorkspace({
   session,
   saveState,
   updateEvent,
+  deleteEvent,
   notify,
 }: {
   event: EventPlan
   session: { email: string; role: Role }
   saveState: SaveState
   updateEvent: (event: EventPlan) => void
+  deleteEvent: (eventId: string) => void
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
   const [newMember, setNewMember] = useState('')
@@ -1149,6 +1262,16 @@ function EventWorkspace({
     notify('Wiki-Notiz wurde ergänzt.')
   }
 
+  const archiveEvent = () => {
+    updateEvent({ ...event, archived: !event.archived })
+    notify(event.archived ? 'Event wurde wieder aktiviert.' : 'Event wurde archiviert.')
+  }
+
+  const removeEvent = () => {
+    if (!window.confirm(`Event "${event.name}" wirklich dauerhaft löschen?`)) return
+    deleteEvent(event.id)
+  }
+
   return (
     <section className="event-workspace">
       <Link className="ghost back-button" to="/">Zurück zum Dashboard</Link>
@@ -1165,6 +1288,16 @@ function EventWorkspace({
           <Stat icon={<ShieldCheck />} label="Rolle" value={session.role} />
         </div>
       </div>
+      {isAdmin && (
+        <div className="event-admin-actions">
+          <button className="ghost" type="button" onClick={archiveEvent}>
+            <Archive size={16} /> {event.archived ? 'Reaktivieren' : 'Archivieren'}
+          </button>
+          <button className="ghost danger" type="button" onClick={removeEvent}>
+            <Trash2 size={16} /> Löschen
+          </button>
+        </div>
+      )}
 
       <NextSteps event={event} isAdmin={isAdmin} setActiveTab={setActiveTab} />
 

@@ -383,6 +383,16 @@ app.put('/api/events/:eventId', requireAuth, async (request, response) => {
   response.json({ event: eventFromRow(result.rows[0]) })
 })
 
+app.delete('/api/events/:eventId', requireAuth, async (request, response) => {
+  if (!(await canWriteEvent(request.user, request.params.eventId))) {
+    return response.status(403).json({ message: 'Du darfst dieses Event nicht löschen.' })
+  }
+  const result = await query('DELETE FROM events WHERE id = $1 RETURNING data', [request.params.eventId])
+  if (!result.rowCount) return response.status(404).json({ message: 'Event nicht gefunden.' })
+  await audit(request.user, `Event "${result.rows[0].data?.name || request.params.eventId}" wurde gelöscht.`)
+  response.json({ ok: true })
+})
+
 app.post('/api/events/:eventId/members', requireAuth, async (request, response) => {
   if (!(await canWriteEvent(request.user, request.params.eventId))) {
     return response.status(403).json({ message: 'Du darfst dieses Team nicht bearbeiten.' })

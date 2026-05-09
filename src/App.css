@@ -620,6 +620,57 @@ form {
   box-shadow: 0 14px 34px rgba(25, 38, 63, 0.12);
 }
 
+.event-card.archived {
+  opacity: 0.72;
+}
+
+.event-card-grid.compact {
+  margin-top: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.archive-box {
+  margin-top: 14px;
+}
+
+.archive-box summary,
+.event-admin-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.archive-box summary {
+  cursor: pointer;
+  color: #415066;
+  font-weight: 800;
+}
+
+.event-admin-actions {
+  justify-content: flex-end;
+}
+
+.ghost.danger {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.profile-page {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.7fr) minmax(320px, 1fr);
+  gap: 14px;
+}
+
+.profile-summary {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.profile-summary span {
+  color: #627084;
+}
+
 .event-card strong {
   font-size: 18px;
   line-height: 1.15;
