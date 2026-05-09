@@ -6,27 +6,27 @@ Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.20` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.4.21` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
-- Login mit Admin, Helfer und Künstler-Rollen im Node/PostgreSQL-Backend
+- Login mit Admin- und Helfer-Rollen im Node/PostgreSQL-Backend
 - Event-Übersicht mit Event-Steckbrief, Motto, Zielgruppe, Gästezahl und Ort
 - Aktionskatalog mit typischen Event-Bausteinen wie Aufbau, Abbau, Musik, Flyer, Einladungen, Technik, Catering und GEMA
 - Event-Templates für wiederkehrende Abläufe wie Hochzeit, Tanzevent oder Vereinsfest, inklusive JSON-Import und JSON-Export im Adminbereich
-- eigene Infrastruktur-Ansicht, editierbares Runsheet und SMART-orientierte Aufgabenfelder mit Bemerkungen
+- eigene Infrastruktur-Ansicht, editierbarer Zeitplan und SMART-orientierte Aufgabenfelder mit Bemerkungen
 - Aktionskarten mit Kanban-Unteraufgaben, Status, Verantwortlichen, Deadline und Datei-Merkliste
 - klare Aufgaben-Akkordeons, bei denen immer nur ein Arbeitsbereich geöffnet ist
-- Teamverwaltung per E-Mail
+- eventbezogene Teamverwaltung per E-Mail, Name, Funktion/Kommentar und Entfernen aus dem Event
 - hübsche HTML-Einladungsmails mit Eventinfos
 - Budget-Übersicht für Einnahmen und Ausgaben
 - Infrastruktur-Checkliste
-- Runsheet, Künstler-/Booking-Notizen, Wiki und Benachrichtigungsbereich
+- Zeitplan, Programm-/Booking-Notizen, Wiki und Benachrichtigungsbereich
 - JSON-Export
 - Responsives Layout für Smartphone und Desktop
 - Basis-Offline-Cache per Service Worker
 - Footer mit Impressum, Datenschutz, Cookiehinweisen, GitHub-Link und automatisch aus `package.json` gelesener Rev.-Nummer
-- Adminseite für SMTP-Konfiguration, Base URL, Benutzerverwaltung, Passwort-Reset, Deaktivierung, Löschen und Auditlog
+- Adminseite für SMTP-Konfiguration, Base URL, Template Store und Auditlog
 - SMTP-Testmail direkt aus der Adminseite inklusive SMTP-Passwort/App-Passwort
 - Adminbereich nur nach Admin-Login sichtbar
 - optionale Admin-Einstellung, ob alle angemeldeten Nutzer oder nur Admins neue Events erstellen dürfen
@@ -42,7 +42,7 @@ Rev. `v0.4.20` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 - Restore-Anleitung für PostgreSQL-Backups
 - Echte App-Routen für Dashboard, Admin, Eventdetails und Rechtsseiten
 - Validierte Formulare mit `react-hook-form` und `zod`
-- Globale Suche, Event-Tabs, mobile Aufbauansicht, Leerzustände und Undo beim Benutzerlöschen
+- Globale Suche, Event-Tabs, mobile Aufbauansicht und hilfreiche Leerzustände
 
 ## Tech Stack
 
@@ -56,7 +56,7 @@ Rev. `v0.4.20` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 
 ## Event-Templates
 
-Admins pflegen globale Vorlagen im Adminbereich unter **Template Store**. Eine Vorlage kann Standard-Aktionen, Unteraufgaben, Infrastruktur-Haken, Runsheet-Punkte, Budgetposten und Wiki-Notizen enthalten. Beim Anlegen eines Events wählt ein Nutzer optional eine Vorlage aus; Eventlotse füllt das Event danach direkt vor.
+Admins pflegen globale Vorlagen im Adminbereich unter **Template Store**. Eine Vorlage kann Standard-Aktionen, Unteraufgaben, Infrastruktur-Haken, Zeitplan-Punkte, Budgetposten und Wiki-Notizen enthalten. Beim Anlegen eines Events wählt ein Nutzer optional eine Vorlage aus; Eventlotse füllt das Event danach direkt vor.
 
 Vorlagen lassen sich als JSON exportieren und wieder importieren. Dadurch kannst du dir eigene wiederkehrende Eventtypen bauen, zum Beispiel einen Tanzabend für deine Frau, und dieselbe Vorlage später erneut verwenden oder mit anderen Eventlotse-Installationen teilen.
 

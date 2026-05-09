@@ -130,7 +130,7 @@ async function requireAuth(request, response, next) {
 
   try {
     const payload = jwt.verify(token, config.jwtSecret)
-    const result = await query('SELECT id, email, name, role, active, last_login_at FROM users WHERE id = $1', [payload.sub])
+    const result = await query('SELECT id, email, name, profile_note, role, active, last_login_at FROM users WHERE id = $1', [payload.sub])
     const user = result.rows[0]
     if (!user || !user.active) return response.status(401).json({ message: 'Benutzer ist nicht aktiv.' })
     request.user = user
@@ -166,7 +166,8 @@ function publicUser(user) {
     id: user.id,
     email: user.email,
     name: user.name,
-    role: user.role,
+    profileNote: user.profile_note || '',
+    role: user.role === 'Admin' ? 'Admin' : 'Helfer',
     active: user.active,
     lastLogin: user.last_login_at ? new Date(user.last_login_at).toLocaleString('de-DE') : 'noch nie',
   }
@@ -208,6 +209,13 @@ function formatIcsDate(date) {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
 }
 
+function formatGermanDate(date) {
+  if (!date) return 'Datum offen'
+  const parsed = new Date(`${date}T12:00:00+01:00`)
+  if (Number.isNaN(parsed.getTime())) return 'Datum offen'
+  return new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin' }).format(parsed)
+}
+
 function csvCell(value) {
   return `"${String(value || '').replaceAll('"', '""')}"`
 }
@@ -232,7 +240,7 @@ async function runDueReminders(actor = null) {
     const dueTasks = dueTasksForEvent(event, today)
     if (!dueTasks.length) continue
 
-    const recipients = [...new Set((event.members || []).filter((member) => member.role !== 'Künstler').map((member) => member.email))]
+    const recipients = [...new Set((event.members || []).map((member) => member.email))]
     for (const to of recipients) {
       await transport.sendMail(await reminderMail({ to, event, tasks: dueTasks.slice(0, 8) }))
       sent.push({ event: event.name, to, count: dueTasks.length })
@@ -291,7 +299,7 @@ app.post('/api/auth/logout', async (request, response) => {
   if (token) {
     try {
       const payload = jwt.verify(token, config.jwtSecret)
-      const result = await query('SELECT id, email, name, role, active, last_login_at FROM users WHERE id = $1', [payload.sub])
+      const result = await query('SELECT id, email, name, profile_note, role, active, last_login_at FROM users WHERE id = $1', [payload.sub])
       user = result.rows[0] || null
     } catch {
       user = null
@@ -314,6 +322,22 @@ app.post('/api/auth/change-password', requireAuth, async (request, response) => 
   await query('UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2', [passwordHash, request.user.id])
   await audit(request.user, 'Passwort wurde geändert.')
   response.json({ ok: true })
+})
+
+app.post('/api/auth/profile', requireAuth, async (request, response) => {
+  const name = String(request.body?.name || '').trim()
+  const profileNote = String(request.body?.profileNote || '').trim()
+  const result = await query(
+    `UPDATE users SET
+       name = COALESCE(NULLIF($1, ''), name),
+       profile_note = $2,
+       updated_at = now()
+     WHERE id = $3
+     RETURNING id, email, name, profile_note, role, active, last_login_at`,
+    [name, profileNote, request.user.id],
+  )
+  await audit(request.user, 'Profil wurde aktualisiert.')
+  response.json({ user: publicUser(result.rows[0]) })
 })
 
 app.get('/api/invites/:token', async (request, response) => {
@@ -380,7 +404,7 @@ app.get('/api/bootstrap', requireAuth, async (request, response) => {
     )
   const settings = request.user.role === 'Admin' ? appSettings : null
   const users = request.user.role === 'Admin'
-    ? (await query('SELECT id, email, name, role, active, last_login_at FROM users ORDER BY created_at DESC')).rows.map(publicUser)
+    ? (await query('SELECT id, email, name, profile_note, role, active, last_login_at FROM users ORDER BY created_at DESC')).rows.map(publicUser)
     : []
   const auditLog = request.user.role === 'Admin'
     ? (await query('SELECT actor_email, action, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 80')).rows.map((entry) => ({
@@ -456,7 +480,8 @@ app.post('/api/events/:eventId/members', requireAuth, async (request, response) 
   if (!(await canWriteEvent(request.user, request.params.eventId))) {
     return response.status(403).json({ message: 'Du darfst dieses Team nicht bearbeiten.' })
   }
-  const { email, name = '', role = 'Helfer' } = request.body || {}
+  const { email, name = '', note = '' } = request.body || {}
+  const role = 'Helfer'
   const normalizedEmail = String(email || '').toLowerCase().trim()
   const tempPassword = crypto.randomBytes(9).toString('base64url')
   const passwordHash = await bcrypt.hash(tempPassword, 12)
@@ -470,7 +495,7 @@ app.post('/api/events/:eventId/members', requireAuth, async (request, response) 
     `INSERT INTO users (email, name, password_hash, role, active)
      VALUES ($1, $2, $3, $4, true)
      ON CONFLICT (email) DO UPDATE SET name = COALESCE(NULLIF(EXCLUDED.name, ''), users.name), active = true
-     RETURNING id, email, name, role, active, last_login_at`,
+     RETURNING id, email, name, profile_note, role, active, last_login_at`,
     [normalizedEmail, name || normalizedEmail.split('@')[0], passwordHash, role],
   )
   const user = userResult.rows[0]
@@ -487,7 +512,7 @@ app.post('/api/events/:eventId/members', requireAuth, async (request, response) 
     ...event,
     members: [
       ...event.members.filter((member) => member.email !== normalizedEmail),
-      { id: user.id, name: user.name, email: user.email, role },
+      { id: user.id, name: user.name, email: user.email, role: 'Helfer', note: String(note || '').trim() },
     ],
   }
   await query('UPDATE events SET data = $1, updated_at = now() WHERE id = $2', [JSON.stringify(updatedEvent), request.params.eventId])
@@ -498,6 +523,25 @@ app.post('/api/events/:eventId/members', requireAuth, async (request, response) 
   await transport.sendMail(await invitationMail({ to: normalizedEmail, event: updatedEvent, inviter: request.user.email, inviteUrl }))
   await audit(request.user, `Einladung an "${normalizedEmail}" für "${event.name}" wurde versendet.`)
   response.status(201).json({ user: publicUser(user), event: updatedEvent, inviteUrl, initialPassword: config.nodeEnv === 'development' ? tempPassword : undefined })
+})
+
+app.delete('/api/events/:eventId/members/:userId', requireAuth, async (request, response) => {
+  if (!(await canWriteEvent(request.user, request.params.eventId))) {
+    return response.status(403).json({ message: 'Du darfst dieses Team nicht bearbeiten.' })
+  }
+  const eventResult = await query('SELECT id, data FROM events WHERE id = $1', [request.params.eventId])
+  if (!eventResult.rowCount) return response.status(404).json({ message: 'Event nicht gefunden.' })
+  const event = eventFromRow(eventResult.rows[0])
+  const member = (event.members || []).find((entry) => entry.id === request.params.userId)
+  if (!member) return response.status(404).json({ message: 'Mitglied nicht gefunden.' })
+  if (member.role === 'Admin') return response.status(400).json({ message: 'Event-Admins können nicht entfernt werden.' })
+  const updatedEvent = { ...event, members: event.members.filter((entry) => entry.id !== request.params.userId) }
+  await transaction(async (client) => {
+    await client.query('DELETE FROM event_members WHERE event_id = $1 AND user_id = $2', [request.params.eventId, request.params.userId])
+    await client.query('UPDATE events SET data = $1, updated_at = now() WHERE id = $2', [JSON.stringify(updatedEvent), request.params.eventId])
+  })
+  await audit(request.user, `Mitglied "${member.email}" wurde aus "${event.name}" entfernt.`)
+  response.json({ event: updatedEvent })
 })
 
 app.get('/api/events/:eventId/files', requireAuth, async (request, response) => {
@@ -618,7 +662,7 @@ app.get('/api/events/:eventId/export/tasks.xlsx', requireAuth, async (request, r
     })
   })
 
-  const runsheet = workbook.addWorksheet('Ablauf')
+  const runsheet = workbook.addWorksheet('Zeitplan')
   runsheet.columns = [
     { header: 'Uhrzeit', key: 'time', width: 12 },
     { header: 'Programmpunkt', key: 'title', width: 36 },
@@ -655,13 +699,13 @@ app.get('/api/events/:eventId/export/runsheet.pdf', requireAuth, async (request,
   const doc = new PDFDocument({ margin: 48, size: 'A4' })
 
   response.setHeader('Content-Type', 'application/pdf')
-  response.setHeader('Content-Disposition', `attachment; filename="${sanitizeFilename(event.name)}-ablauf.pdf"`)
+  response.setHeader('Content-Disposition', `attachment; filename="${sanitizeFilename(event.name)}-zeitplan.pdf"`)
   doc.pipe(response)
   doc.fontSize(22).text(event.name || 'Event', { continued: false })
   doc.moveDown(0.3)
-  doc.fontSize(11).fillColor('#475569').text(`${event.date || 'Datum offen'} · ${event.location || 'Ort offen'}`)
+  doc.fontSize(11).fillColor('#475569').text(`${formatGermanDate(event.date)} · ${event.location || 'Ort offen'}`)
   doc.moveDown(1)
-  doc.fillColor('#0f172a').fontSize(16).text('Ablaufplan')
+  doc.fillColor('#0f172a').fontSize(16).text('Zeitplan')
   doc.moveDown(0.5)
 
   if (!event.runsheet?.length) {
@@ -729,7 +773,7 @@ app.patch('/api/admin/users/:userId', requireAuth, requireAdmin, async (request,
      RETURNING id, email, name, role, active, last_login_at`,
     [
       typeof name === 'string' ? name.trim() : null,
-      ['Admin', 'Helfer', 'Künstler'].includes(role) ? role : null,
+      ['Admin', 'Helfer'].includes(role) ? role : null,
       typeof active === 'boolean' ? active : null,
       request.params.userId,
     ],

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email text NOT NULL UNIQUE,
   name text NOT NULL DEFAULT '',
+  profile_note text NOT NULL DEFAULT '',
   password_hash text NOT NULL,
   role text NOT NULL CHECK (role IN ('Admin', 'Helfer', 'Künstler')),
   active boolean NOT NULL DEFAULT true,
@@ -91,6 +92,7 @@ async function ensureAdmin() {
 
 async function main() {
   await query(schema)
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_note text NOT NULL DEFAULT ''")
   await ensureAdmin()
   await query(
     `INSERT INTO settings (key, value)

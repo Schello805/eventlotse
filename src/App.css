@@ -693,6 +693,17 @@ form {
   color: #627084;
 }
 
+.profile-edit-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.profile-save-button {
+  margin-top: 10px;
+  justify-self: start;
+}
+
 .event-card strong {
   font-size: 18px;
   line-height: 1.15;
@@ -1112,6 +1123,28 @@ form {
   border-radius: 999px;
   padding: 5px 9px 5px 5px;
   font-size: 13px;
+}
+
+.member-pill-wide {
+  max-width: 100%;
+  border-radius: 8px;
+  padding-right: 7px;
+}
+
+.member-pill-wide span {
+  min-width: 0;
+  display: grid;
+}
+
+.member-pill-wide small {
+  color: #627084;
+}
+
+.team-add-form {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(180px, 1fr) minmax(180px, 1.2fr) auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .member-pill b,
@@ -1821,7 +1854,8 @@ form {
   }
 
   .action-picker-summary,
-  .runsheet-row {
+  .runsheet-row,
+  .team-add-form {
     grid-template-columns: 1fr;
   }
 

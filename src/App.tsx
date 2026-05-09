@@ -8,6 +8,8 @@ import { differenceInCalendarDays, format, isValid, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
 import {
   Bell,
+  ArrowDown,
+  ArrowUp,
   Archive,
   CalendarDays,
   Check,
@@ -25,7 +27,7 @@ import {
   Mail,
   MapPin,
   Music,
-  Power,
+  Printer,
   Plus,
   RotateCcw,
   Save,
@@ -43,7 +45,7 @@ import {
 import { useLocalStorage } from './hooks/useLocalStorage'
 import './App.css'
 
-type Role = 'Admin' | 'Helfer' | 'Künstler'
+type Role = 'Admin' | 'Helfer'
 type Status = 'todo' | 'doing' | 'done'
 type LegalPageKey = 'impressum' | 'datenschutz' | 'cookies'
 
@@ -52,6 +54,7 @@ type Member = {
   name: string
   email: string
   role: Role
+  note?: string
 }
 
 type Task = {
@@ -124,15 +127,6 @@ type EventTemplate = {
   wiki: string[]
 }
 
-type AdminUser = {
-  id: string
-  name: string
-  email: string
-  role: Role
-  active: boolean
-  lastLogin: string
-}
-
 type AppSettings = {
   baseUrl: string
   smtpHost: string
@@ -175,7 +169,6 @@ const repoUrl = 'https://github.com/Schello805/eventlotse'
 const storageKey = 'eventlotse.workspace.v2'
 const settingsStorageKey = 'eventlotse.settings.v1'
 const templateStorageKey = 'eventlotse.templates.v1'
-const usersStorageKey = 'eventlotse.users.v1'
 const auditStorageKey = 'eventlotse.audit.v1'
 
 const builtInEventTemplates: EventTemplate[] = [
@@ -261,14 +254,14 @@ const builtInEventTemplates: EventTemplate[] = [
 const actionTemplates = [
   { title: 'Aufbau', category: 'Logistik', help: 'Alles, was vor Ort aufgebaut, angeliefert oder vorbereitet werden muss.' },
   { title: 'Abbau', category: 'Logistik', help: 'Rückbau, Reinigung, Rückgabe und letzte Kontrolle nach der Veranstaltung.' },
-  { title: 'Musik & Künstler', category: 'Booking', help: 'DJs, Bands, Redner oder andere Programmpunkte inklusive Kontakt und Absprachen.' },
+  { title: 'Musik & Programm', category: 'Booking', help: 'DJs, Bands, Redner oder andere Programmpunkte inklusive Kontakt und Absprachen.' },
   { title: 'Flyer & Design', category: 'Marketing', help: 'Gestaltung, Freigabe, Druck und Verteilung von Flyern oder digitalen Einladungen.' },
   { title: 'Einladungen', category: 'Gäste', help: 'Gästeliste, Zu- und Absagen, Zielgruppe und wichtige Hinweise an Gäste.' },
   { title: 'Catering', category: 'Versorgung', help: 'Essen, Getränke, Einkauf, Ausgabe, Kühlung und Pfand.' },
   { title: 'GEMA & Genehmigungen', category: 'Recht', help: 'Musiknutzung, Ausschank, Lärm, Genehmigungen und Auflagen.' },
   { title: 'Technik', category: 'Infrastruktur', help: 'Ton, Licht, Strom, Kabel, Bühne, WLAN und technische Pläne.' },
   { title: 'Schichtplan', category: 'Team', help: 'Wer hilft wann bei Aufbau, Kasse, Bar, Einlass oder Abbau?' },
-  { title: 'Runsheet', category: 'Ablauf', help: 'Minutengenauer Plan für den Veranstaltungstag.' },
+  { title: 'Zeitplan', category: 'Ablauf', help: 'Minutengenauer Plan für den Veranstaltungstag.' },
 ]
 
 const infrastructureOptions = [
@@ -316,18 +309,10 @@ const settingsSchema = z.object({
   allowUserEventCreation: z.boolean().default(false),
 })
 
-const userFormSchema = z.object({
-  name: z.string().trim().optional(),
-  email: z.string().email('Bitte eine gültige E-Mail-Adresse eingeben.'),
-  role: z.enum(['Admin', 'Helfer', 'Künstler']),
-})
-
 type EventFormValues = z.infer<typeof eventFormSchema>
 type SettingsFormValues = z.infer<typeof settingsSchema>
-type UserFormValues = z.infer<typeof userFormSchema>
 type EventFormInput = z.input<typeof eventFormSchema>
 type SettingsFormInput = z.input<typeof settingsSchema>
-type UserFormInput = z.input<typeof userFormSchema>
 
 const uid = () => crypto.randomUUID()
 const blockedUploadExtensions = new Set([
@@ -359,8 +344,8 @@ function isBlockedUploadFile(fileName: string) {
 }
 
 function normalizeRole(role: string): Role {
-  if (role === 'Admin' || role === 'Helfer' || role === 'Künstler') return role
-  return role === 'Act' ? 'Künstler' : 'Helfer'
+  if (role === 'Admin' || role === 'Helfer') return role
+  return 'Helfer'
 }
 
 function normalizeEvent(event: EventPlan): EventPlan {
@@ -375,13 +360,6 @@ function normalizeEvent(event: EventPlan): EventPlan {
 function isLegacyDemoEvent(event: EventPlan) {
   const emails = event.members.map((member) => member.email)
   return legacyDemoEventNames.has(event.name) && emails.some((email) => email.endsWith('@example.de'))
-}
-
-function normalizeAdminUser(user: AdminUser): AdminUser {
-  return {
-    ...user,
-    role: normalizeRole(user.role),
-  }
 }
 
 function normalizeTemplate(template: Partial<EventTemplate> = {}): EventTemplate {
@@ -433,26 +411,8 @@ function loadEvents() {
   }
 }
 
-function defaultUsers(events: EventPlan[]): AdminUser[] {
-  const users = new Map<string, AdminUser>()
-  events.forEach((event) => {
-    event.members.forEach((member) => {
-      users.set(member.email, {
-        id: member.id,
-        name: member.name,
-        email: member.email,
-        role: normalizeRole(member.role),
-        active: true,
-        lastLogin: member.role === 'Admin' ? 'heute' : 'noch nie',
-      })
-    })
-  })
-  return [...users.values()]
-}
-
 function App() {
   const [events, setEvents] = useLocalStorage<EventPlan[]>(storageKey, loadEvents())
-  const [adminUsers, setAdminUsers] = useLocalStorage<AdminUser[]>(usersStorageKey, defaultUsers(loadEvents()))
   const [settings, setSettings] = useLocalStorage<AppSettings>(settingsStorageKey, defaultSettings)
   const [eventTemplates, setEventTemplates] = useLocalStorage<EventTemplate[]>(templateStorageKey, builtInEventTemplates)
   const [auditLog, setAuditLog] = useLocalStorage<AuditEntry[]>(
@@ -466,7 +426,7 @@ function App() {
       },
     ],
   )
-  const [session, setSession] = useState({ email: 'info@schellenberger.biz', role: 'Helfer' as Role, authenticated: false })
+  const [session, setSession] = useState({ email: 'info@schellenberger.biz', name: '', profileNote: '', role: 'Helfer' as Role, authenticated: false })
   const [canCreateEvents, setCanCreateEvents] = useState(false)
   const [loginPassword, setLoginPassword] = useState('')
   const [toast, setToast] = useState<ToastState>(null)
@@ -479,31 +439,23 @@ function App() {
     }
   }, [events, setEvents])
 
-  useEffect(() => {
-    const normalizedUsers = adminUsers.map(normalizeAdminUser)
-    if (JSON.stringify(normalizedUsers) !== JSON.stringify(adminUsers)) {
-      setAdminUsers(normalizedUsers)
-    }
-  }, [adminUsers, setAdminUsers])
-
   const loadRemoteData = useCallback(async () => {
     const response = await fetch('/api/bootstrap', { credentials: 'include' })
     if (!response.ok) return
     const data = await response.json()
     if (Array.isArray(data.events)) setEvents(data.events.map(normalizeEvent).filter((event: EventPlan) => !isLegacyDemoEvent(event)))
-    if (Array.isArray(data.users)) setAdminUsers(data.users.map(normalizeAdminUser))
     if (data.settings) setSettings({ ...defaultSettings, ...data.settings, eventTemplates: normalizeTemplates(data.settings.eventTemplates) })
     if (Array.isArray(data.templates)) setEventTemplates(normalizeTemplates(data.templates))
     setCanCreateEvents(Boolean(data.permissions?.canCreateEvents))
     if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog)
-  }, [setAdminUsers, setAuditLog, setEventTemplates, setEvents, setSettings])
+  }, [setAuditLog, setEventTemplates, setEvents, setSettings])
 
   useEffect(() => {
     fetch('/api/me', { credentials: 'include' })
       .then((response) => (response.ok ? response.json() : null))
       .then(async (data) => {
         if (!data?.user) return
-        setSession({ email: data.user.email, role: data.user.role, authenticated: true })
+        setSession({ email: data.user.email, name: data.user.name || '', profileNote: data.user.profileNote || '', role: normalizeRole(data.user.role), authenticated: true })
         await loadRemoteData()
       })
       .catch(() => undefined)
@@ -557,7 +509,7 @@ function App() {
       })
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.message || 'Login fehlgeschlagen. Prüfe E-Mail, Passwort und Serverstatus.')
-      setSession({ email: data.user.email, role: data.user.role, authenticated: true })
+      setSession({ email: data.user.email, name: data.user.name || '', profileNote: data.user.profileNote || '', role: normalizeRole(data.user.role), authenticated: true })
       setLoginPassword('')
       await loadRemoteData()
       notify('Anmeldung erfolgreich.')
@@ -568,7 +520,7 @@ function App() {
 
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined)
-    setSession({ email: 'info@schellenberger.biz', role: 'Helfer', authenticated: false })
+    setSession({ email: 'info@schellenberger.biz', name: '', profileNote: '', role: 'Helfer', authenticated: false })
     setCanCreateEvents(false)
     notify('Du bist abgemeldet.')
   }
@@ -621,14 +573,6 @@ function App() {
       wiki: template?.wiki || [],
     }
     setEvents((current) => [next, ...current])
-    setAdminUsers((current) =>
-      current.some((user) => user.email === session.email)
-        ? current
-        : [
-            ...current,
-            { id: uid(), name: 'Michael', email: session.email, role: 'Admin', active: true, lastLogin: 'heute' },
-          ],
-    )
     addAudit(`Event "${next.name}" wurde angelegt.`)
     notify(`Event "${next.name}" wurde angelegt.`)
     fetch('/api/events', {
@@ -682,11 +626,9 @@ function App() {
               session.authenticated && session.role === 'Admin' ? (
                 <AdminPage
                   session={session}
-                  users={adminUsers}
                   settings={settings}
                   templates={eventTemplates}
                   auditLog={auditLog}
-                  setUsers={setAdminUsers}
                   setSettings={setSettings}
                   setTemplates={setEventTemplates}
                   addAudit={addAudit}
@@ -701,7 +643,7 @@ function App() {
             path="/events/:eventId"
             element={<EventRoute events={events} session={session} saveState={saveState} updateEvent={updateEvent} deleteEvent={deleteEvent} notify={notify} />}
           />
-          <Route path="/profil" element={session.authenticated ? <ProfilePage session={session} notify={notify} /> : <LoginRequired />} />
+          <Route path="/profil" element={session.authenticated ? <ProfilePage session={session} setSession={setSession} notify={notify} /> : <LoginRequired />} />
           <Route path="/impressum" element={<LegalPage page="impressum" />} />
           <Route path="/datenschutz" element={<LegalPage page="datenschutz" />} />
           <Route path="/cookies" element={<LegalPage page="cookies" />} />
@@ -778,7 +720,7 @@ function Dashboard({
           <span className="eyebrow dark"><ShieldCheck size={14} /> Privates Event-Operations-Dashboard</span>
           <h1>Alle Veranstaltungen auf einen Blick.</h1>
           <p>
-            Plane Aufbau, Abbau, Booking, Flyer, Budget, Infrastruktur und Runsheet in einer selbst hostbaren App.
+            Plane Aufbau, Abbau, Booking, Flyer, Budget, Infrastruktur und Zeitplan in einer selbst hostbaren App.
           </p>
           <p className="help-text">Frische Installationen starten leer. Lege zuerst ein Event an, danach öffnet sich der restliche Workflow.</p>
         </div>
@@ -990,7 +932,7 @@ function LoginRequired() {
       <div className="login-feature-grid">
         <div><KanbanSquare size={18} /><strong>Aufgaben</strong><span>Kanban, Verantwortliche, Fälligkeiten und Dateien.</span></div>
         <div><Users size={18} /><strong>Team</strong><span>Einladungen, Rollen und Zugriff pro Event.</span></div>
-        <div><Clock3 size={18} /><strong>Ablauf</strong><span>Runsheet, Aufbau, Abbau und Programmpunkte.</span></div>
+        <div><Clock3 size={18} /><strong>Ablauf</strong><span>Zeitplan, Aufbau, Abbau und Programmpunkte.</span></div>
         <div><ShieldCheck size={18} /><strong>Self-Hosting</strong><span>PostgreSQL, Auditlog, SMTP und eigene Domain.</span></div>
       </div>
     </section>
@@ -999,12 +941,15 @@ function LoginRequired() {
 
 function ProfilePage({
   session,
+  setSession,
   notify,
 }: {
-  session: { email: string; role: Role; authenticated: boolean }
+  session: { email: string; name?: string; profileNote?: string; role: Role; authenticated: boolean }
+  setSession: (session: { email: string; name: string; profileNote: string; role: Role; authenticated: boolean }) => void
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
   const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' })
+  const [profileDraft, setProfileDraft] = useState({ name: session.name || '', profileNote: session.profileNote || '' })
 
   const changePassword = async () => {
     if (passwordDraft.newPassword !== passwordDraft.repeatPassword) {
@@ -1030,6 +975,23 @@ function ProfilePage({
     }
   }
 
+  const saveProfile = async () => {
+    try {
+      const response = await fetch('/api/auth/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(profileDraft),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.message || 'Profil konnte nicht gespeichert werden.')
+      setSession({ email: data.user.email, name: data.user.name || '', profileNote: data.user.profileNote || '', role: normalizeRole(data.user.role), authenticated: true })
+      notify('Profil wurde gespeichert.')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Profil konnte nicht gespeichert werden.')
+    }
+  }
+
   return (
     <section className="profile-page">
       <div className="panel">
@@ -1045,6 +1007,17 @@ function ProfilePage({
           <strong>{session.email}</strong>
           <span>Rolle</span>
           <strong>{session.role}</strong>
+        </div>
+        <div className="profile-edit-form">
+          <label className="field">
+            <span>Name</span>
+            <input value={profileDraft.name} onChange={(event) => setProfileDraft({ ...profileDraft, name: event.target.value })} placeholder="Dein Name" />
+          </label>
+          <label className="field">
+            <span>Funktion / Kommentar</span>
+            <textarea value={profileDraft.profileNote} onChange={(event) => setProfileDraft({ ...profileDraft, profileNote: event.target.value })} placeholder="z.B. Technik, Bar, Aufbau, Ansprechpartner vor Ort" />
+          </label>
+          <button className="primary profile-save-button" type="button" onClick={saveProfile}><Save size={16} /> Profil speichern</button>
         </div>
       </div>
       <div className="panel">
@@ -1065,7 +1038,7 @@ function ProfilePage({
             <span>Neues Passwort wiederholen</span>
             <input type="password" value={passwordDraft.repeatPassword} onChange={(event) => setPasswordDraft({ ...passwordDraft, repeatPassword: event.target.value })} />
           </label>
-          <button className="primary" type="button" onClick={changePassword}><Save size={16} /> Passwort speichern</button>
+          <button className="primary profile-save-button" type="button" onClick={changePassword}><Save size={16} /> Passwort speichern</button>
         </div>
       </div>
     </section>
@@ -1231,7 +1204,7 @@ function MobileSetupPanel({ event }: { event: EventPlan }) {
         <div>
           <span className="muted">Nächste Zeiten</span>
           {nextItems.length === 0 ? (
-            <p>Noch kein Runsheet.</p>
+            <p>Noch kein Zeitplan.</p>
           ) : (
             <ul>
               {nextItems.map((item) => <li key={item.id}>{item.time} · {item.title} · {item.owner}</li>)}
@@ -1322,7 +1295,7 @@ function EventWorkspace({
   deleteEvent: (eventId: string) => void
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
-  const [newMember, setNewMember] = useState('')
+  const [newMember, setNewMember] = useState({ email: '', name: '', note: '' })
   const [budgetDraft, setBudgetDraft] = useState({ label: '', amount: '', type: 'expense' as 'income' | 'expense' })
   const [runDraft, setRunDraft] = useState({ time: '', title: '', owner: '' })
   const [wikiDraft, setWikiDraft] = useState('')
@@ -1383,19 +1356,19 @@ function EventWorkspace({
   }
 
   const addMember = async () => {
-    if (!newMember.trim()) return
-    const email = newMember.trim()
+    if (!newMember.email.trim()) return
+    const email = newMember.email.trim()
     try {
       const response = await fetch(`/api/events/${event.id}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email, role: 'Helfer' }),
+        body: JSON.stringify({ email, name: newMember.name, note: newMember.note, role: 'Helfer' }),
       })
       if (response.ok) {
         const data = await response.json()
         updateEvent(data.event)
-        setNewMember('')
+        setNewMember({ email: '', name: '', note: '' })
         notify(`Einladung an ${email} wurde versendet.`)
         return
       }
@@ -1408,14 +1381,31 @@ function EventWorkspace({
         ...event.members,
         {
           id: uid(),
-          name: email.split('@')[0],
+          name: newMember.name.trim() || email.split('@')[0],
           email,
           role: 'Helfer',
+          note: newMember.note.trim(),
         },
       ],
     })
-    setNewMember('')
+    setNewMember({ email: '', name: '', note: '' })
     notify(`${email} wurde lokal zum Event-Team hinzugefügt. Einladungsmails brauchen den Server.`)
+  }
+
+  const removeMember = async (member: Member) => {
+    if (member.role === 'Admin') {
+      notify('Event-Admins können nicht aus dem Team entfernt werden.')
+      return
+    }
+    try {
+      const response = await fetch(`/api/events/${event.id}/members/${member.id}`, { method: 'DELETE', credentials: 'include' })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.message || 'Mitglied konnte nicht entfernt werden.')
+      updateEvent(data.event)
+      notify(`${member.name || member.email} wurde aus diesem Event entfernt.`)
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Mitglied konnte nicht entfernt werden.')
+    }
   }
 
   const exportJson = () => {
@@ -1512,7 +1502,7 @@ function EventWorkspace({
       <Link className="ghost back-button" to="/">Zurück zum Dashboard</Link>
       <div className="event-hero">
         <div>
-          <span className="eyebrow"><CalendarDays size={14} /> {event.date || 'Datum offen'}</span>
+          <span className="eyebrow"><CalendarDays size={14} /> {formatDate(event.date)}</span>
           <h1>{event.name}</h1>
           <p>{event.motto}</p>
           <span className={`save-state ${saveState}`}>{saveStateLabel(saveState)}</span>
@@ -1554,7 +1544,7 @@ function EventWorkspace({
                 <a className="ghost" href={`/api/events/${event.id}/calendar.ics`}><CalendarDays size={16} /> iCal</a>
                 <a className="ghost" href={`/api/events/${event.id}/export/tasks.csv`}><Download size={16} /> CSV</a>
                 <a className="ghost" href={`/api/events/${event.id}/export/tasks.xlsx`}><Download size={16} /> XLSX</a>
-                <a className="ghost" href={`/api/events/${event.id}/export/runsheet.pdf`}><FileText size={16} /> PDF</a>
+                <a className="ghost" href={`/api/events/${event.id}/export/runsheet.pdf`}><FileText size={16} /> Zeitplan-PDF</a>
                 <button className="ghost" onClick={exportJson}><Download size={16} /> JSON</button>
               </div>
             </div>
@@ -1601,7 +1591,7 @@ function EventWorkspace({
             </div>
             <ul className="notification-list">
               <li><Bell size={15} /> Flyer-Druck 14 Tage vor Event prüfen.</li>
-              <li><Clock3 size={15} /> {event.runsheet.length} Ablaufpunkte im Runsheet.</li>
+              <li><Clock3 size={15} /> {event.runsheet.length} Punkte im Zeitplan.</li>
             </ul>
           </section>
         </div>
@@ -1694,20 +1684,27 @@ function EventWorkspace({
           <section className="panel span-2">
             <div className="section-head">
               <h2>Team</h2>
-              <HelpHint text="Personen mit Zugriff auf dieses Event. Admins steuern alles, Helfer bearbeiten zugewiesene Aufgaben, Künstler sehen vor allem relevante Ablaufdaten." />
+              <HelpHint text="Personen mit Zugriff auf dieses Event. Teammitglieder können danach Aufgaben übernehmen und ihre Profildaten selbst pflegen." />
               <Mail size={18} />
             </div>
             <div className="member-list">
               {event.members.map((member) => (
-                <span className="member-pill" key={member.id}>
+                <span className="member-pill member-pill-wide" key={member.id}>
                   <b>{member.name.slice(0, 2).toUpperCase()}</b>
-                  {member.email}
+                  <span><strong>{member.name || member.email}</strong><small>{member.email}{member.note ? ` · ${member.note}` : ''}</small></span>
+                  {isAdmin && member.role !== 'Admin' && (
+                    <button className="icon-button danger" type="button" onClick={() => removeMember(member)} aria-label={`${member.email} entfernen`}>
+                      <Trash2 size={15} />
+                    </button>
+                  )}
                 </span>
               ))}
             </div>
             {isAdmin && (
-              <div className="inline-form">
-                <input value={newMember} onChange={(change) => setNewMember(change.target.value)} placeholder="helfer@email.de" />
+              <div className="team-add-form">
+                <input value={newMember.name} onChange={(change) => setNewMember({ ...newMember, name: change.target.value })} placeholder="Name, z.B. Anna Müller" />
+                <input value={newMember.email} onChange={(change) => setNewMember({ ...newMember, email: change.target.value })} placeholder="helfer@email.de" />
+                <input value={newMember.note} onChange={(change) => setNewMember({ ...newMember, note: change.target.value })} placeholder="Funktion/Bemerkung, z.B. Bar, Aufbau, Technik" />
                 <button className="icon-button" onClick={addMember} aria-label="Mithelfer hinzufügen"><Plus size={18} /></button>
               </div>
             )}
@@ -1760,10 +1757,14 @@ function EventWorkspace({
             <section className="panel span-2">
               <div className="section-head">
                 <div>
-                  <h2>Runsheet</h2>
-                  <p className="help-text">Minutengenauer Tagesplan: Aufbau, Soundcheck, Einlass, Programmpunkte und Abbau. Du kannst Zeilen direkt bearbeiten, sortieren oder löschen.</p>
+                  <h2>Zeitplan</h2>
+                  <p className="help-text">Minutengenauer Tagesplan: Aufbau, Soundcheck, Einlass, Programmpunkte und Abbau. Du kannst Zeilen direkt bearbeiten, sortieren, löschen oder als PDF speichern.</p>
                 </div>
-                <ClipboardList size={18} />
+                <div className="button-row">
+                  <button className="ghost" type="button" onClick={() => window.print()}><Printer size={16} /> Drucken</button>
+                  <a className="ghost" href={`/api/events/${event.id}/export/runsheet.pdf`}><FileText size={16} /> PDF speichern</a>
+                  <ClipboardList size={18} />
+                </div>
               </div>
               {event.runsheet.length === 0 ? (
                 <EmptyState title="Noch kein Ablaufplan" text="Lege die wichtigsten Zeiten für Aufbau, Einlass, Programmpunkte und Abbau an." />
@@ -1775,8 +1776,8 @@ function EventWorkspace({
                       <input value={item.title} onChange={(change) => updateRunItem(item.id, { title: change.target.value })} placeholder="Programmpunkt" disabled={!isAdmin} />
                       <input value={item.owner} onChange={(change) => updateRunItem(item.id, { owner: change.target.value })} placeholder="Verantwortlich" disabled={!isAdmin} />
                       <div className="row-actions">
-                        <button className="icon-button" type="button" onClick={() => moveRunItem(item.id, -1)} disabled={!isAdmin || index === 0} aria-label="Nach oben"><Upload size={15} /></button>
-                        <button className="icon-button" type="button" onClick={() => moveRunItem(item.id, 1)} disabled={!isAdmin || index === event.runsheet.length - 1} aria-label="Nach unten"><Download size={15} /></button>
+                        <button className="icon-button" type="button" onClick={() => moveRunItem(item.id, -1)} disabled={!isAdmin || index === 0} aria-label="Nach oben"><ArrowUp size={15} /></button>
+                        <button className="icon-button" type="button" onClick={() => moveRunItem(item.id, 1)} disabled={!isAdmin || index === event.runsheet.length - 1} aria-label="Nach unten"><ArrowDown size={15} /></button>
                         <button className="icon-button danger" type="button" onClick={() => deleteRunItem(item.id)} disabled={!isAdmin} aria-label="Ablaufpunkt löschen"><Trash2 size={15} /></button>
                       </div>
                     </div>
@@ -1837,22 +1838,18 @@ Absprachen: 45 Minuten Set, Rechnung folgt`}
 
 function AdminPage({
   session,
-  users,
   settings,
   templates,
   auditLog,
-  setUsers,
   setSettings,
   setTemplates,
   addAudit,
   notify,
 }: {
   session: { email: string; role: Role; authenticated: boolean }
-  users: AdminUser[]
   settings: AppSettings
   templates: EventTemplate[]
   auditLog: AuditEntry[]
-  setUsers: (next: AdminUser[] | ((current: AdminUser[]) => AdminUser[])) => void
   setSettings: (next: AppSettings | ((current: AppSettings) => AppSettings)) => void
   setTemplates: (next: EventTemplate[] | ((current: EventTemplate[]) => EventTemplate[])) => void
   addAudit: (action: string) => void
@@ -1867,72 +1864,6 @@ function AdminPage({
     resolver: zodResolver(settingsSchema),
     defaultValues: settings,
   })
-  const userForm = useForm<UserFormInput, unknown, UserFormValues>({
-    resolver: zodResolver(userFormSchema),
-    defaultValues: { name: '', email: '', role: 'Helfer' },
-  })
-
-  const addUser = async (data: UserFormValues) => {
-    try {
-      const response = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(data),
-      })
-      const result = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(result?.message || 'Benutzer konnte nicht gespeichert werden.')
-      setUsers((current) => [...current.filter((user) => user.id !== result.user.id), result.user])
-      addAudit(`Benutzer "${result.user.email}" wurde hinzugefügt.`)
-      notify(`Benutzer "${result.user.email}" wurde hinzugefügt.`)
-      userForm.reset({ name: '', email: '', role: 'Helfer' })
-    } catch (error) {
-      notify(error instanceof Error ? error.message : 'Benutzer konnte nicht gespeichert werden.')
-    }
-  }
-
-  const updateUser = async (userId: string, patch: Partial<AdminUser>) => {
-    setUsers((current) => current.map((user) => (user.id === userId ? { ...user, ...patch } : user)))
-    try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(patch),
-      })
-      const result = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(result?.message || 'Benutzer konnte nicht aktualisiert werden.')
-      setUsers((current) => current.map((user) => (user.id === userId ? result.user : user)))
-    } catch (error) {
-      notify(error instanceof Error ? error.message : 'Benutzer konnte nicht aktualisiert werden.')
-    }
-  }
-
-  const deleteUser = async (user: AdminUser) => {
-    if (!window.confirm(`Benutzer ${user.email} wirklich löschen?`)) return
-    try {
-      const response = await fetch(`/api/admin/users/${user.id}`, { method: 'DELETE', credentials: 'include' })
-      const result = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(result?.message || 'Benutzer konnte nicht gelöscht werden.')
-      setUsers((current) => current.filter((entry) => entry.id !== user.id))
-      addAudit(`Benutzer "${user.email}" wurde gelöscht.`)
-      setToast({ message: `Benutzer ${user.email} gelöscht.` })
-    } catch (error) {
-      notify(error instanceof Error ? error.message : 'Benutzer konnte nicht gelöscht werden.')
-    }
-  }
-
-  const resetPassword = async (user: AdminUser) => {
-    try {
-      const response = await fetch(`/api/admin/users/${user.id}/reset-password`, { method: 'POST', credentials: 'include' })
-      const result = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(result?.message || 'Passwort-Reset konnte nicht versendet werden.')
-      addAudit(`Passwort-Reset für "${user.email}" wurde versendet.`)
-      notify(`Passwort-Reset für "${user.email}" wurde per E-Mail versendet.`)
-    } catch (error) {
-      notify(error instanceof Error ? error.message : 'Passwort-Reset konnte nicht versendet werden.')
-    }
-  }
 
   const saveSettings = async (data: SettingsFormValues) => {
     const nextSettings = { ...data, smtpPass: data.smtpPass ? '********' : settings.smtpPass, eventTemplates: templates }
@@ -2081,13 +2012,13 @@ function AdminPage({
       <div className="admin-hero">
         <div>
           <span className="eyebrow dark"><Settings size={14} /> Administration</span>
-          <h1>System, Mail und Benutzer verwalten.</h1>
-          <p>Konfiguriere SMTP, Base URL, Benutzerzugänge und prüfe Änderungen im Auditlog.</p>
+          <h1>System, Mail und Vorlagen verwalten.</h1>
+          <p>Konfiguriere SMTP, Base URL, Template Store und prüfe Änderungen im Auditlog.</p>
           <p className="help-text">Diese Einstellungen brauchst du meist nur beim Setup oder bei Wartung. Deshalb bleiben technische Bereiche als Akkordeon kompakt.</p>
         </div>
         <div className="admin-summary">
-          <Stat icon={<Users />} label="Benutzer" value={String(users.length)} />
-          <Stat icon={<ShieldCheck />} label="Aktiv" value={String(users.filter((user) => user.active).length)} />
+          <Stat icon={<Users />} label="Event-Teams" value="pro Event" />
+          <Stat icon={<ShieldCheck />} label="Zugriff" value="Einladung" />
           <Stat icon={<Server />} label="SMTP" value={settings.smtpHost ? 'bereit' : 'offen'} />
         </div>
       </div>
@@ -2166,64 +2097,6 @@ function AdminPage({
             <button className="primary" type="button" onClick={changeOwnPassword}><Save size={16} /> Passwort speichern</button>
           </div>
         </details>
-
-        <section className="panel admin-panel span-2">
-          <div className="section-head">
-            <h2>Benutzerverwaltung</h2>
-            <HelpHint text="Hier verwaltest du globale Benutzer. Eventzugriff entsteht zusätzlich über die Teamliste im jeweiligen Event." />
-            <UserCog size={18} />
-          </div>
-          <form className="user-create-row" onSubmit={userForm.handleSubmit(addUser)}>
-            <input placeholder="Name" {...userForm.register('name')} />
-            <label className="field inline-error-field">
-              <input placeholder="E-Mail" {...userForm.register('email')} />
-              {userForm.formState.errors.email && <small className="form-error">{userForm.formState.errors.email.message}</small>}
-            </label>
-            <select {...userForm.register('role')}>
-              <option>Admin</option>
-              <option>Helfer</option>
-              <option>Künstler</option>
-            </select>
-            <button className="primary" type="submit"><Plus size={16} /> Hinzufügen</button>
-          </form>
-          <div className="user-table" role="table" aria-label="Benutzerverwaltung">
-            <div className="user-row user-row-head" role="row">
-              <span>Name</span>
-              <span>E-Mail</span>
-              <span>Rolle</span>
-              <span>Status</span>
-              <span>Aktionen</span>
-            </div>
-            {users.map((user) => (
-              <div className="user-row" role="row" key={user.id}>
-                <input value={user.name} onChange={(event) => updateUser(user.id, { name: event.target.value })} />
-                <span>{user.email}</span>
-                <select value={user.role} onChange={(event) => updateUser(user.id, { role: event.target.value as Role })}>
-                  <option>Admin</option>
-                  <option>Helfer</option>
-                  <option>Künstler</option>
-                </select>
-                <button
-                  className={user.active ? 'status-button active' : 'status-button'}
-                  onClick={() => {
-                    updateUser(user.id, { active: !user.active })
-                    addAudit(`Benutzer "${user.email}" wurde ${user.active ? 'deaktiviert' : 'aktiviert'}.`)
-                  }}
-                >
-                  <Power size={14} /> {user.active ? 'aktiv' : 'inaktiv'}
-                </button>
-                <div className="user-actions">
-                  <button className="icon-button" onClick={() => resetPassword(user)} aria-label={`Passwort für ${user.email} zurücksetzen`}>
-                    <RotateCcw size={16} />
-                  </button>
-                  <button className="icon-button danger" onClick={() => deleteUser(user)} aria-label={`${user.email} löschen`}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
 
         <section className="panel admin-panel span-2">
           <div className="section-head">
@@ -2412,7 +2285,7 @@ function ActionBoard({
                   disabled={!canEdit}
                 />
                 <div className="task-meta-row">
-                  <small>Fällig: {task.due || 'offen'}</small>
+                  <small>Fällig: {formatDate(task.due)}</small>
                   <small>{members.find((member) => member.id === task.ownerIds[0])?.name || 'ohne Verantwortliche'}</small>
                 </div>
                 <details className="task-details">
