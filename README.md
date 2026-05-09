@@ -6,13 +6,14 @@ Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.13` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.4.14` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
 - Login mit Admin, Helfer und Künstler-Rollen im Node/PostgreSQL-Backend
 - Event-Übersicht mit Event-Steckbrief, Motto, Zielgruppe, Gästezahl und Ort
 - Aktionskatalog mit typischen Event-Bausteinen wie Aufbau, Abbau, Musik, Flyer, Einladungen, Technik, Catering und GEMA
+- Event-Templates für wiederkehrende Abläufe wie Hochzeit, Tanzevent oder Vereinsfest, inklusive JSON-Import und JSON-Export im Adminbereich
 - Aktionskarten mit Kanban-Unteraufgaben, Status, Verantwortlichen, Deadline und Datei-Merkliste
 - Teamverwaltung per E-Mail
 - hübsche HTML-Einladungsmails mit Eventinfos
@@ -47,6 +48,12 @@ Rev. `v0.4.13` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 - PostgreSQL
 - lucide-react Icons
 - LocalStorage als Offline-/Fallback-Schicht, PostgreSQL im Self-Hosting-Betrieb
+
+## Event-Templates
+
+Admins pflegen globale Vorlagen im Adminbereich unter **Template Store**. Eine Vorlage kann Standard-Aktionen, Unteraufgaben, Infrastruktur-Haken, Runsheet-Punkte, Budgetposten und Wiki-Notizen enthalten. Beim Anlegen eines Events wählt ein Nutzer optional eine Vorlage aus; Eventlotse füllt das Event danach direkt vor.
+
+Vorlagen lassen sich als JSON exportieren und wieder importieren. Dadurch kannst du dir eigene wiederkehrende Eventtypen bauen, zum Beispiel einen Tanzabend für deine Frau, und dieselbe Vorlage später erneut verwenden oder mit anderen Eventlotse-Installationen teilen.
 
 ## Lokal starten
 

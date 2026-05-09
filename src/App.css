@@ -1392,6 +1392,60 @@ form {
   margin-bottom: 4px;
 }
 
+.template-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.file-import-button {
+  cursor: pointer;
+}
+
+.file-import-button input {
+  display: none;
+}
+
+.template-store-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.template-card {
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #dce6ef;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.template-card p {
+  margin: 4px 0;
+  color: #627084;
+}
+
+.template-card small {
+  color: #0f5f59;
+  font-weight: 700;
+}
+
+.template-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.template-json {
+  min-height: 220px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
 .user-create-row,
 .user-row {
   display: grid;
@@ -1611,6 +1665,15 @@ form {
 
   .test-mail-box {
     grid-template-columns: 1fr;
+  }
+
+  .template-card {
+    grid-template-columns: 1fr;
+  }
+
+  .template-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 

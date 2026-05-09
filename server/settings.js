@@ -1,5 +1,7 @@
 import { config } from './config.js'
 import { decryptSecret, encryptSecret } from './crypto-box.js'
+import { defaultEventTemplates } from './default-templates.js'
+import crypto from 'node:crypto'
 
 const PLACEHOLDER_VALUES = new Set([
   '',
@@ -25,7 +27,47 @@ export function appSettingsFromEnv() {
     smtpPass: config.smtp.pass ? encryptSecret(config.smtp.pass) : '',
     smtpFrom: config.smtp.from,
     smtpTls: !config.smtp.secure,
+    eventTemplates: defaultEventTemplates,
   }
+}
+
+export function normalizeEventTemplate(template = {}) {
+  return {
+    id: String(template.id || crypto.randomUUID?.() || `template-${Date.now()}`),
+    name: String(template.name || 'Neue Vorlage').trim().slice(0, 80),
+    description: String(template.description || '').trim().slice(0, 500),
+    motto: String(template.motto || '').trim().slice(0, 120),
+    targetGroup: String(template.targetGroup || '').trim().slice(0, 160),
+    guests: Number.isFinite(Number(template.guests)) ? Math.max(0, Number(template.guests)) : 0,
+    actions: Array.isArray(template.actions)
+      ? template.actions.slice(0, 40).map((action = {}) => ({
+          title: String(action.title || 'Aufgabe').trim().slice(0, 100),
+          category: String(action.category || 'Allgemein').trim().slice(0, 80),
+          tasks: Array.isArray(action.tasks) ? action.tasks.slice(0, 40).map((task) => String(task).trim().slice(0, 140)).filter(Boolean) : [],
+        }))
+      : [],
+    infrastructure: Array.isArray(template.infrastructure) ? template.infrastructure.slice(0, 80).map((item) => String(item).trim().slice(0, 80)).filter(Boolean) : [],
+    runsheet: Array.isArray(template.runsheet)
+      ? template.runsheet.slice(0, 80).map((item = {}) => ({
+          time: String(item.time || '').trim().slice(0, 8),
+          title: String(item.title || '').trim().slice(0, 120),
+          owner: String(item.owner || '').trim().slice(0, 80),
+        })).filter((item) => item.time || item.title || item.owner)
+      : [],
+    budget: Array.isArray(template.budget)
+      ? template.budget.slice(0, 80).map((item = {}) => ({
+          label: String(item.label || '').trim().slice(0, 120),
+          type: item.type === 'income' ? 'income' : 'expense',
+          amount: Number.isFinite(Number(item.amount)) ? Number(item.amount) : 0,
+        })).filter((item) => item.label)
+      : [],
+    wiki: Array.isArray(template.wiki) ? template.wiki.slice(0, 80).map((item) => String(item).trim().slice(0, 300)).filter(Boolean) : [],
+  }
+}
+
+export function normalizeEventTemplates(templates) {
+  const source = Array.isArray(templates) && templates.length ? templates : defaultEventTemplates
+  return source.map(normalizeEventTemplate)
 }
 
 export function mergeAppSettings(stored = {}) {
@@ -38,6 +80,7 @@ export function mergeAppSettings(stored = {}) {
     smtpPass: stored.smtpPass && stored.smtpPass !== '********' ? stored.smtpPass : env.smtpPass,
     smtpFrom: !isPlaceholderValue(stored.smtpFrom) ? stored.smtpFrom : env.smtpFrom,
     smtpTls: typeof stored.smtpTls === 'boolean' ? stored.smtpTls : env.smtpTls,
+    eventTemplates: normalizeEventTemplates(stored.eventTemplates || env.eventTemplates),
   }
 }
 

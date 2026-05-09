@@ -16,7 +16,7 @@ import { config } from './config.js'
 import { encryptSecret } from './crypto-box.js'
 import { pool, query, transaction } from './db.js'
 import { createTransport, invitationMail, passwordResetMail, reminderMail, testMail } from './mail.js'
-import { mergeAppSettings, sanitizeAppSettings } from './settings.js'
+import { mergeAppSettings, normalizeEventTemplates, sanitizeAppSettings } from './settings.js'
 
 const app = express()
 const distDir = path.join(config.rootDir, 'dist')
@@ -321,6 +321,7 @@ app.get('/api/me', requireAuth, (request, response) => {
 })
 
 app.get('/api/bootstrap', requireAuth, async (request, response) => {
+  const appSettings = mergeAppSettings(await loadStoredSettings())
   const eventsResult = request.user.role === 'Admin'
     ? await query('SELECT id, data FROM events ORDER BY updated_at DESC')
     : await query(
@@ -330,9 +331,7 @@ app.get('/api/bootstrap', requireAuth, async (request, response) => {
        ORDER BY e.updated_at DESC`,
       [request.user.id],
     )
-  const settings = request.user.role === 'Admin'
-    ? mergeAppSettings(await loadStoredSettings())
-    : null
+  const settings = request.user.role === 'Admin' ? appSettings : null
   const users = request.user.role === 'Admin'
     ? (await query('SELECT id, email, name, role, active, last_login_at FROM users ORDER BY created_at DESC')).rows.map(publicUser)
     : []
@@ -348,9 +347,15 @@ app.get('/api/bootstrap', requireAuth, async (request, response) => {
   response.json({
     events: eventsResult.rows.map(eventFromRow),
     settings: settings ? sanitizeAppSettings(settings) : null,
+    templates: appSettings.eventTemplates,
     users,
     auditLog,
   })
+})
+
+app.get('/api/templates', requireAuth, async (_request, response) => {
+  const settings = mergeAppSettings(await loadStoredSettings())
+  response.json({ templates: settings.eventTemplates })
 })
 
 app.post('/api/events', requireAuth, async (request, response) => {
@@ -716,6 +721,19 @@ app.put('/api/admin/settings', requireAuth, requireAdmin, async (request, respon
   )
   await audit(request.user, 'Systemeinstellungen wurden gespeichert.')
   response.json({ settings: sanitizeAppSettings(next) })
+})
+
+app.put('/api/admin/templates', requireAuth, requireAdmin, async (request, response) => {
+  const current = mergeAppSettings(await loadStoredSettings())
+  const templates = normalizeEventTemplates(request.body?.templates)
+  const next = { ...current, eventTemplates: templates }
+  await query(
+    `INSERT INTO settings (key, value, updated_at) VALUES ('app', $1, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [JSON.stringify(next)],
+  )
+  await audit(request.user, 'Event-Vorlagen wurden gespeichert.')
+  response.json({ templates })
 })
 
 app.post('/api/admin/reminders/run', requireAuth, requireAdmin, async (request, response) => {

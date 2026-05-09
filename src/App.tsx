@@ -109,6 +109,20 @@ type EventPlan = {
   wiki: string[]
 }
 
+type EventTemplate = {
+  id: string
+  name: string
+  description: string
+  motto?: string
+  targetGroup?: string
+  guests?: number
+  actions: { title: string; category: string; tasks: string[] }[]
+  infrastructure: string[]
+  runsheet: { time: string; title: string; owner: string }[]
+  budget: { label: string; type: 'income' | 'expense'; amount: number }[]
+  wiki: string[]
+}
+
 type AdminUser = {
   id: string
   name: string
@@ -126,6 +140,7 @@ type AppSettings = {
   smtpPass?: string
   smtpFrom: string
   smtpTls: boolean
+  eventTemplates: EventTemplate[]
 }
 
 type AuditEntry = {
@@ -157,8 +172,89 @@ type TaskFilter = 'all' | 'open' | 'overdue' | 'mine' | 'unassigned'
 const repoUrl = 'https://github.com/Schello805/eventlotse'
 const storageKey = 'eventlotse.workspace.v2'
 const settingsStorageKey = 'eventlotse.settings.v1'
+const templateStorageKey = 'eventlotse.templates.v1'
 const usersStorageKey = 'eventlotse.users.v1'
 const auditStorageKey = 'eventlotse.audit.v1'
+
+const builtInEventTemplates: EventTemplate[] = [
+  {
+    id: 'template-hochzeit',
+    name: 'Hochzeit',
+    description: 'Feier mit Empfang, Essen, Musik, Ablaufplan, Technik und Fotoalbum.',
+    motto: 'Hochzeitsfeier',
+    targetGroup: 'Familie, Freunde und geladene Gäste',
+    guests: 80,
+    actions: [
+      { title: 'Location & Aufbau', category: 'Logistik', tasks: ['Bestuhlung planen', 'Dekoration vorbereiten', 'Aufbau-Team einteilen'] },
+      { title: 'Essen & Getränke', category: 'Versorgung', tasks: ['Catering abstimmen', 'Getränke kalkulieren', 'Kühlung klären'] },
+      { title: 'Musik & Programm', category: 'Booking', tasks: ['DJ oder Band bestätigen', 'Eröffnungstanz einplanen', 'Reden und Beiträge sammeln'] },
+      { title: 'Foto & Erinnerungen', category: 'Dokumentation', tasks: ['Fotograf klären', 'Fotoalbum-Link anlegen', 'Upload-Hinweis an Gäste vorbereiten'] },
+    ],
+    infrastructure: ['Licht', 'Bar', 'Sanitär', 'Parken'],
+    runsheet: [
+      { time: '14:00', title: 'Aufbau & Dekoration', owner: 'Team' },
+      { time: '17:00', title: 'Empfang', owner: 'offen' },
+      { time: '19:00', title: 'Essen', owner: 'Catering' },
+      { time: '21:00', title: 'Musik & Tanz', owner: 'DJ/Band' },
+    ],
+    budget: [
+      { label: 'Catering', type: 'expense', amount: 0 },
+      { label: 'Musik', type: 'expense', amount: 0 },
+      { label: 'Dekoration', type: 'expense', amount: 0 },
+    ],
+    wiki: ['Notfallkontakte sammeln', 'Fotoalbum-Link nach der Feier teilen'],
+  },
+  {
+    id: 'template-tanzevent',
+    name: 'Tanzevent',
+    description: 'Wiederkehrende Tanzveranstaltung mit Musik, Einlass, Technik, Bar und Aufbau.',
+    motto: 'Tanzabend',
+    targetGroup: 'Tanzgruppe, Freunde und Gäste',
+    guests: 60,
+    actions: [
+      { title: 'Musik & Tanzfläche', category: 'Booking', tasks: ['Playlist/DJ klären', 'Tanzfläche prüfen', 'Soundcheck planen'] },
+      { title: 'Aufbau', category: 'Logistik', tasks: ['Tische wegräumen', 'Licht aufbauen', 'Beschilderung vorbereiten'] },
+      { title: 'Bar & Getränke', category: 'Versorgung', tasks: ['Getränke einkaufen', 'Bar-Schicht planen', 'Kasse/Wechselgeld klären'] },
+      { title: 'Einladung', category: 'Gäste', tasks: ['Einladung versenden', 'Zusagen sammeln', 'Hinweise zu Schuhen/Parken teilen'] },
+    ],
+    infrastructure: ['PA-Anlage', 'Licht', 'Bar', 'Parken'],
+    runsheet: [
+      { time: '17:00', title: 'Aufbau', owner: 'Team' },
+      { time: '18:30', title: 'Soundcheck', owner: 'Musik' },
+      { time: '19:30', title: 'Einlass', owner: 'offen' },
+      { time: '20:00', title: 'Tanzbeginn', owner: 'Musik' },
+    ],
+    budget: [
+      { label: 'Getränke', type: 'expense', amount: 0 },
+      { label: 'Musik/Technik', type: 'expense', amount: 0 },
+    ],
+    wiki: ['Standard-Aufbauplan prüfen', 'Fotoalbum-Link für Gäste vorbereiten'],
+  },
+  {
+    id: 'template-vereinsfest',
+    name: 'Vereinsfest',
+    description: 'Kleines bis mittleres Fest mit Aufbau, Ausschank, Genehmigungen und Schichten.',
+    motto: 'Vereinsfest',
+    targetGroup: 'Mitglieder, Familien und Nachbarschaft',
+    guests: 120,
+    actions: [
+      { title: 'Genehmigungen', category: 'Recht', tasks: ['Ausschank prüfen', 'GEMA klären', 'Lärmschutzzeiten notieren'] },
+      { title: 'Schichtplan', category: 'Team', tasks: ['Aufbau-Schicht', 'Bar-Schicht', 'Abbau-Schicht'] },
+      { title: 'Infrastruktur', category: 'Logistik', tasks: ['Biertische organisieren', 'Strom prüfen', 'Sanitär klären'] },
+    ],
+    infrastructure: ['Biertische', 'Bar', 'Stromplan', 'GEMA', 'Ausschank', 'Sanitär'],
+    runsheet: [
+      { time: '09:00', title: 'Aufbau', owner: 'Team' },
+      { time: '14:00', title: 'Beginn', owner: 'offen' },
+      { time: '22:00', title: 'Abbau', owner: 'Team' },
+    ],
+    budget: [
+      { label: 'Getränke/Essen', type: 'expense', amount: 0 },
+      { label: 'Spenden/Sponsoring', type: 'income', amount: 0 },
+    ],
+    wiki: ['Lessons Learned nach dem Fest ergänzen'],
+  },
+]
 
 const actionTemplates = [
   { title: 'Aufbau', category: 'Logistik', help: 'Alles, was vor Ort aufgebaut, angeliefert oder vorbereitet werden muss.' },
@@ -193,9 +289,11 @@ const defaultSettings: AppSettings = {
   smtpPass: '',
   smtpFrom: 'Eventlotse <info@example.org>',
   smtpTls: true,
+  eventTemplates: builtInEventTemplates,
 }
 
 const eventFormSchema = z.object({
+  templateId: z.string().optional(),
   name: z.string().trim().min(1, 'Eventname fehlt.'),
   motto: z.string().trim().optional(),
   targetGroup: z.string().trim().optional(),
@@ -258,6 +356,44 @@ function normalizeAdminUser(user: AdminUser): AdminUser {
   }
 }
 
+function normalizeTemplate(template: Partial<EventTemplate> = {}): EventTemplate {
+  return {
+    id: template.id || uid(),
+    name: String(template.name || 'Neue Vorlage').trim(),
+    description: String(template.description || '').trim(),
+    motto: template.motto || '',
+    targetGroup: template.targetGroup || '',
+    guests: Number(template.guests || 0),
+    actions: Array.isArray(template.actions)
+      ? template.actions.map((action) => ({
+          title: String(action.title || 'Aufgabe').trim(),
+          category: String(action.category || 'Allgemein').trim(),
+          tasks: Array.isArray(action.tasks) ? action.tasks.map((task) => String(task).trim()).filter(Boolean) : [],
+        })).filter((action) => action.title)
+      : [],
+    infrastructure: Array.isArray(template.infrastructure) ? template.infrastructure.map(String).filter(Boolean) : [],
+    runsheet: Array.isArray(template.runsheet)
+      ? template.runsheet.map((item) => ({
+          time: String(item.time || ''),
+          title: String(item.title || ''),
+          owner: String(item.owner || ''),
+        })).filter((item) => item.time || item.title || item.owner)
+      : [],
+    budget: Array.isArray(template.budget)
+      ? template.budget.map((item) => ({
+          label: String(item.label || ''),
+          type: item.type === 'income' ? ('income' as const) : ('expense' as const),
+          amount: Number(item.amount || 0),
+        })).filter((item) => item.label)
+      : [],
+    wiki: Array.isArray(template.wiki) ? template.wiki.map(String).filter(Boolean) : [],
+  }
+}
+
+function normalizeTemplates(templates: unknown): EventTemplate[] {
+  return Array.isArray(templates) && templates.length ? templates.map((template) => normalizeTemplate(template as Partial<EventTemplate>)) : builtInEventTemplates
+}
+
 function loadEvents() {
   const raw = localStorage.getItem(storageKey)
   if (!raw) return emptyEvents
@@ -290,6 +426,7 @@ function App() {
   const [events, setEvents] = useLocalStorage<EventPlan[]>(storageKey, loadEvents())
   const [adminUsers, setAdminUsers] = useLocalStorage<AdminUser[]>(usersStorageKey, defaultUsers(loadEvents()))
   const [settings, setSettings] = useLocalStorage<AppSettings>(settingsStorageKey, defaultSettings)
+  const [eventTemplates, setEventTemplates] = useLocalStorage<EventTemplate[]>(templateStorageKey, builtInEventTemplates)
   const [auditLog, setAuditLog] = useLocalStorage<AuditEntry[]>(
     auditStorageKey,
     [
@@ -326,9 +463,10 @@ function App() {
     const data = await response.json()
     if (Array.isArray(data.events)) setEvents(data.events.map(normalizeEvent).filter((event: EventPlan) => !isLegacyDemoEvent(event)))
     if (Array.isArray(data.users)) setAdminUsers(data.users.map(normalizeAdminUser))
-    if (data.settings) setSettings(data.settings)
+    if (data.settings) setSettings({ ...defaultSettings, ...data.settings, eventTemplates: normalizeTemplates(data.settings.eventTemplates) })
+    if (Array.isArray(data.templates)) setEventTemplates(normalizeTemplates(data.templates))
     if (Array.isArray(data.auditLog)) setAuditLog(data.auditLog)
-  }, [setAdminUsers, setAuditLog, setEvents, setSettings])
+  }, [setAdminUsers, setAuditLog, setEventTemplates, setEvents, setSettings])
 
   useEffect(() => {
     fetch('/api/me', { credentials: 'include' })
@@ -409,12 +547,13 @@ function App() {
       notify('Bitte melde dich an, bevor du ein Event anlegst.')
       throw new Error('Login erforderlich.')
     }
+    const template = eventTemplates.find((entry) => entry.id === data.templateId)
     const next: EventPlan = {
       id: uid(),
       name: data.name,
-      motto: data.motto || 'Noch kein Motto',
-      targetGroup: data.targetGroup || 'Privater Kreis',
-      guests: data.guests,
+      motto: data.motto || template?.motto || 'Noch kein Motto',
+      targetGroup: data.targetGroup || template?.targetGroup || 'Privater Kreis',
+      guests: data.guests || template?.guests || 0,
       date: data.date || '',
       location: data.location || '',
       mapUrl: '',
@@ -422,12 +561,29 @@ function App() {
       photoUrl: '',
       archived: false,
       members: [{ id: uid(), name: 'Michael', email: session.email, role: 'Admin' }],
-      actions: [],
-      budget: [],
-      infrastructure: [],
-      runsheet: [],
+      actions: template?.actions.map((action) => ({
+        id: uid(),
+        title: action.title,
+        category: action.category,
+        owners: [],
+        deadline: data.date || '',
+        notes: '',
+        tasks: action.tasks.map((task) => ({
+          id: uid(),
+          title: task,
+          ownerIds: [],
+          due: data.date || '',
+          status: 'todo',
+          notes: '',
+          files: [],
+          comments: [],
+        })),
+      })) || [],
+      budget: template?.budget.map((line) => ({ ...line, id: uid() })) || [],
+      infrastructure: template?.infrastructure || [],
+      runsheet: template?.runsheet.map((item) => ({ ...item, id: uid() })) || [],
       actNotes: '',
-      wiki: [],
+      wiki: template?.wiki || [],
     }
     setEvents((current) => [next, ...current])
     setAdminUsers((current) =>
@@ -484,7 +640,7 @@ function App() {
 
       <main className="workspace dashboard-mode">
         <Routes>
-          <Route path="/" element={<Dashboard events={events} session={session} addEvent={addEvent} notify={notify} />} />
+          <Route path="/" element={<Dashboard events={events} templates={eventTemplates} session={session} addEvent={addEvent} notify={notify} />} />
           <Route
             path="/admin"
             element={
@@ -493,9 +649,11 @@ function App() {
                   session={session}
                   users={adminUsers}
                   settings={settings}
+                  templates={eventTemplates}
                   auditLog={auditLog}
                   setUsers={setAdminUsers}
                   setSettings={setSettings}
+                  setTemplates={setEventTemplates}
                   addAudit={addAudit}
                   notify={notify}
                 />
@@ -525,11 +683,13 @@ function App() {
 
 function Dashboard({
   events,
+  templates,
   session,
   addEvent,
   notify,
 }: {
   events: EventPlan[]
+  templates: EventTemplate[]
   session: { email: string; role: Role; authenticated: boolean }
   addEvent: (data: EventFormValues) => EventPlan
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
@@ -538,6 +698,7 @@ function Dashboard({
   const eventForm = useForm<EventFormInput, unknown, EventFormValues>({
     resolver: zodResolver(eventFormSchema),
     defaultValues: {
+      templateId: '',
       name: '',
       motto: '',
       targetGroup: '',
@@ -600,6 +761,16 @@ function Dashboard({
           </div>
           <p className="help-text">Diese Basisdaten reichen für die erste Eventkarte. Details wie Team, Infrastruktur und Ablauf ergänzt du später im Event.</p>
           <form onSubmit={eventForm.handleSubmit(submitEvent)}>
+            <label className="field">
+              <span>Vorlage</span>
+              <select {...eventForm.register('templateId')}>
+                <option value="">Ohne Vorlage starten</option>
+                {templates.map((template) => (
+                  <option value={template.id} key={template.id}>{template.name}</option>
+                ))}
+              </select>
+              <small className="help-text">Optional. Eine Vorlage füllt Aufgaben, Infrastruktur, Budget und Ablauf automatisch vor.</small>
+            </label>
             <label className="field">
               <span>Eventname</span>
               <input placeholder="z.B. Hoffest, Geburtstag, Vereinsabend" {...eventForm.register('name')} />
@@ -1553,18 +1724,22 @@ function AdminPage({
   session,
   users,
   settings,
+  templates,
   auditLog,
   setUsers,
   setSettings,
+  setTemplates,
   addAudit,
   notify,
 }: {
   session: { email: string; role: Role; authenticated: boolean }
   users: AdminUser[]
   settings: AppSettings
+  templates: EventTemplate[]
   auditLog: AuditEntry[]
   setUsers: (next: AdminUser[] | ((current: AdminUser[]) => AdminUser[])) => void
   setSettings: (next: AppSettings | ((current: AppSettings) => AppSettings)) => void
+  setTemplates: (next: EventTemplate[] | ((current: EventTemplate[]) => EventTemplate[])) => void
   addAudit: (action: string) => void
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
@@ -1572,6 +1747,7 @@ function AdminPage({
   const [testMailTo, setTestMailTo] = useState(settings.smtpUser || 'info@schellenberger.biz')
   const [testMailPending, setTestMailPending] = useState(false)
   const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' })
+  const [templateJson, setTemplateJson] = useState('')
   const settingsForm = useForm<SettingsFormInput, unknown, SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
     defaultValues: settings,
@@ -1644,7 +1820,7 @@ function AdminPage({
   }
 
   const saveSettings = async (data: SettingsFormValues) => {
-    const nextSettings = { ...data, smtpPass: data.smtpPass ? '********' : settings.smtpPass }
+    const nextSettings = { ...data, smtpPass: data.smtpPass ? '********' : settings.smtpPass, eventTemplates: templates }
     setSettings(nextSettings)
     addAudit('Systemeinstellungen wurden gespeichert.')
     try {
@@ -1683,6 +1859,70 @@ function AdminPage({
       notify(error instanceof Error ? error.message : 'Testmail konnte nicht gesendet werden.')
     } finally {
       setTestMailPending(false)
+    }
+  }
+
+  const saveTemplates = async (nextTemplates: EventTemplate[], message = 'Event-Vorlagen wurden gespeichert.') => {
+    const normalized = normalizeTemplates(nextTemplates)
+    setTemplates(normalized)
+    setSettings((current) => ({ ...current, eventTemplates: normalized }))
+    try {
+      const response = await fetch('/api/admin/templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ templates: normalized }),
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(result?.message || 'Event-Vorlagen konnten nicht gespeichert werden.')
+      setTemplates(normalizeTemplates(result.templates))
+      addAudit('Event-Vorlagen wurden gespeichert.')
+      notify(message)
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Event-Vorlagen konnten nicht gespeichert werden.')
+    }
+  }
+
+  const editTemplateAsJson = (template: EventTemplate) => {
+    setTemplateJson(JSON.stringify(template, null, 2))
+    notify(`Vorlage "${template.name}" liegt unten als JSON zum Bearbeiten bereit.`)
+  }
+
+  const saveTemplateJson = () => {
+    try {
+      const parsed = JSON.parse(templateJson)
+      const imported = normalizeTemplates(Array.isArray(parsed) ? parsed : [parsed])
+      const nextTemplates = imported.reduce((current, template) => {
+        const existing = current.findIndex((entry) => entry.id === template.id)
+        if (existing >= 0) {
+          return current.map((entry) => (entry.id === template.id ? template : entry))
+        }
+        return [...current, template]
+      }, templates)
+      saveTemplates(nextTemplates, `${imported.length} Vorlage(n) importiert oder aktualisiert.`)
+      setTemplateJson('')
+    } catch {
+      notify('JSON konnte nicht gelesen werden. Bitte Format prüfen.')
+    }
+  }
+
+  const exportTemplates = (selectedTemplates: EventTemplate[]) => {
+    const blob = new Blob([JSON.stringify(selectedTemplates, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = selectedTemplates.length === 1 ? `${selectedTemplates[0].id}.json` : 'eventlotse-templates.json'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const importTemplateFile = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      setTemplateJson(await file.text())
+      notify('Template-Datei geladen. Prüfe den JSON-Text und speichere ihn danach.')
+    } catch {
+      notify('Template-Datei konnte nicht gelesen werden.')
     }
   }
 
@@ -1864,6 +2104,63 @@ function AdminPage({
               </div>
             ))}
           </div>
+        </section>
+
+        <section className="panel admin-panel span-2">
+          <div className="section-head">
+            <div>
+              <h2>Template Store</h2>
+              <p className="help-text">Vorlagen sind global: Admins pflegen sie hier, alle angemeldeten Nutzer können sie beim Event-Erstellen auswählen.</p>
+            </div>
+            <ClipboardList size={18} />
+          </div>
+          <div className="template-toolbar">
+            <button className="ghost" type="button" onClick={() => exportTemplates(templates)}><Download size={16} /> Alle exportieren</button>
+            <label className="ghost file-import-button">
+              <Upload size={16} /> JSON importieren
+              <input type="file" accept="application/json,.json" onChange={(event) => importTemplateFile(event.target.files?.[0])} />
+            </label>
+            <button className="ghost" type="button" onClick={() => saveTemplates(builtInEventTemplates, 'Standardvorlagen wurden wiederhergestellt.')}><RotateCcw size={16} /> Standardvorlagen</button>
+          </div>
+          <div className="template-store-list">
+            {templates.map((template) => (
+              <article className="template-card" key={template.id}>
+                <div>
+                  <strong>{template.name}</strong>
+                  <p>{template.description || 'Keine Beschreibung hinterlegt.'}</p>
+                  <small>{template.actions.length} Aktionen · {template.runsheet.length} Ablaufpunkte · {template.budget.length} Budgetposten</small>
+                </div>
+                <div className="template-actions">
+                  <button className="ghost" type="button" onClick={() => editTemplateAsJson(template)}><FileText size={15} /> JSON</button>
+                  <button className="ghost" type="button" onClick={() => exportTemplates([template])}><Download size={15} /> Export</button>
+                  <button className="icon-button danger" type="button" onClick={() => saveTemplates(templates.filter((entry) => entry.id !== template.id), `Vorlage "${template.name}" wurde gelöscht.`)} aria-label={`${template.name} löschen`}>
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+          <label className="field">
+            <span>Vorlage als JSON bearbeiten oder importieren</span>
+            <textarea
+              className="template-json"
+              value={templateJson}
+              onChange={(event) => setTemplateJson(event.target.value)}
+              placeholder={`Beispiel:
+{
+  "id": "template-tanzabend-samstag",
+  "name": "Tanzabend Samstag",
+  "description": "Wiederkehrendes Tanzevent",
+  "actions": [{"title": "Musik", "category": "Booking", "tasks": ["Playlist prüfen"]}],
+  "infrastructure": ["PA-Anlage", "Licht"],
+  "runsheet": [{"time": "19:00", "title": "Einlass", "owner": "Team"}],
+  "budget": [{"label": "Getränke", "type": "expense", "amount": 0}],
+  "wiki": ["Standard-Aufbauplan nutzen"]
+}`}
+            />
+            <small className="help-text">Du kannst eine einzelne Vorlage oder eine Liste von Vorlagen einfügen. Gleiche IDs werden aktualisiert.</small>
+          </label>
+          <button className="primary" type="button" onClick={saveTemplateJson} disabled={!templateJson.trim()}><Save size={16} /> JSON speichern</button>
         </section>
 
         <section className="panel admin-panel span-2">
