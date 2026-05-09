@@ -14,6 +14,8 @@ REMINDER_HOUR="${REMINDER_HOUR:-8}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-info@schellenberger.biz}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -base64 18 | tr -d '\n')}"
 SYSTEMD_SERVICE="/etc/systemd/system/eventlotse.service"
+NGINX_SITE="/etc/nginx/sites-available/eventlotse"
+NGINX_SITE_LINK="/etc/nginx/sites-enabled/eventlotse"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/eventlotse}"
 SKIP_BACKUP="${SKIP_BACKUP:-false}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-30}"
@@ -104,6 +106,10 @@ database_user_from_url() {
 
 database_password_from_url() {
   node -e "const url=new URL(process.env.DATABASE_URL); console.log(decodeURIComponent(url.password))"
+}
+
+public_host_from_env() {
+  node -e "const value=process.env.PUBLIC_BASE_URL || ''; try { console.log(new URL(value).hostname || '_') } catch { console.log('_') }"
 }
 
 ensure_database() {
@@ -198,6 +204,100 @@ verify_dist_version() {
   fi
 }
 
+write_nginx_proxy_site() {
+  if ! command -v nginx >/dev/null 2>&1; then
+    return
+  fi
+
+  load_env
+  local public_host cert_dir
+  public_host="$(public_host_from_env)"
+  if [ "$public_host" = "_" ]; then
+    public_host="$SERVER_NAME"
+  fi
+  cert_dir="/etc/letsencrypt/live/${public_host}"
+
+  log "Synchronisiere Nginx-Proxy für ${public_host}."
+  if [ -f "${cert_dir}/fullchain.pem" ] && [ -f "${cert_dir}/privkey.pem" ]; then
+    cat > "$NGINX_SITE" <<NGINX
+server {
+  listen 80;
+  listen [::]:80;
+  server_name ${public_host};
+  return 301 https://\$host\$request_uri;
+}
+
+server {
+  listen 443 ssl http2;
+  listen [::]:443 ssl http2;
+  server_name ${public_host};
+
+  ssl_certificate ${cert_dir}/fullchain.pem;
+  ssl_certificate_key ${cert_dir}/privkey.pem;
+  include /etc/letsencrypt/options-ssl-nginx.conf;
+  ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+  access_log /var/log/nginx/eventlotse.access.log;
+  error_log /var/log/nginx/eventlotse.error.log;
+
+  location / {
+    proxy_pass http://127.0.0.1:${PORT:-$APP_PORT};
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+  }
+}
+NGINX
+  else
+    cat > "$NGINX_SITE" <<NGINX
+server {
+  listen 80;
+  listen [::]:80;
+  server_name ${public_host};
+
+  access_log /var/log/nginx/eventlotse.access.log;
+  error_log /var/log/nginx/eventlotse.error.log;
+
+  location / {
+    proxy_pass http://127.0.0.1:${PORT:-$APP_PORT};
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+  }
+}
+NGINX
+  fi
+
+  ln -sfn "$NGINX_SITE" "$NGINX_SITE_LINK"
+  rm -f /etc/nginx/sites-enabled/default
+}
+
+verify_public_version() {
+  if ! command -v nginx >/dev/null 2>&1; then
+    return
+  fi
+
+  load_env
+  local expected_version public_url public_response
+  expected_version="$(node -p "require('${APP_DIR}/package.json').version")"
+  public_url="${PUBLIC_BASE_URL%/}/version.json"
+  log "Prüfe öffentliche Version ${public_url}."
+  public_response="$(curl -fs "$public_url" 2>/dev/null || true)"
+  if [[ "$public_response" == *"\"version\":\"${expected_version}\""* ]]; then
+    log "Öffentliche Domain liefert Version ${expected_version}."
+    return
+  fi
+
+  echo "Die öffentliche Domain liefert noch nicht Version ${expected_version}." >&2
+  echo "Antwort von ${public_url}:" >&2
+  echo "$public_response" | head -n 20 >&2
+  exit 1
+}
+
 main() {
   require_root
 
@@ -231,8 +331,10 @@ main() {
   restart_and_check
 
   if command -v nginx >/dev/null 2>&1; then
+    write_nginx_proxy_site
     nginx -t
     systemctl reload nginx
+    verify_public_version
   fi
 
   log "Update abgeschlossen. Aktiver Stand: $(git -C "$APP_DIR" rev-parse --short HEAD)"
