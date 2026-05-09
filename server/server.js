@@ -69,6 +69,9 @@ app.use((request, response, next) => {
     new URL(config.publicBaseUrl).origin,
   ])
   if (!allowedOrigins.has(origin)) {
+    if (request.path === '/api/auth/login') {
+      return response.status(403).json({ message: 'Anmeldung nicht möglich. Bitte E-Mail und Passwort prüfen oder die Seite neu laden.' })
+    }
     return response.status(403).json({ message: 'Anfrage von dieser Herkunft ist nicht erlaubt.' })
   }
   next()
