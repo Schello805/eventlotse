@@ -32,6 +32,28 @@ write_env_line() {
   printf '%s=%s\n' "$1" "$(quote_env_value "${2:-}")"
 }
 
+public_base_url_for_server_name() {
+  if [ -n "${PUBLIC_BASE_URL_OVERRIDE:-}" ]; then
+    printf '%s\n' "$PUBLIC_BASE_URL_OVERRIDE"
+    return
+  fi
+
+  if [ -f "/etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/${SERVER_NAME}/privkey.pem" ]; then
+    printf 'https://%s\n' "$SERVER_NAME"
+  else
+    printf 'http://%s\n' "$SERVER_NAME"
+  fi
+}
+
+cookie_secure_for_public_base_url() {
+  local public_base_url="$1"
+  if [[ "$public_base_url" == https://* ]]; then
+    printf 'true\n'
+  else
+    printf 'false\n'
+  fi
+}
+
 require_root() {
   if [ "$(id -u)" -ne 0 ]; then
     echo "Bitte als root ausführen, z.B. mit sudo." >&2
@@ -103,14 +125,17 @@ setup_postgres() {
 write_env_file() {
   log "Schreibe Umgebungskonfiguration nach ${ENV_FILE}."
   install -d -m 0750 "$ENV_DIR"
+  local public_base_url cookie_secure
+  public_base_url="$(public_base_url_for_server_name)"
+  cookie_secure="$(cookie_secure_for_public_base_url "$public_base_url")"
   {
     write_env_line NODE_ENV production
     write_env_line PORT "$APP_PORT"
     write_env_line HOST 127.0.0.1
-    write_env_line PUBLIC_BASE_URL "http://${SERVER_NAME}"
+    write_env_line PUBLIC_BASE_URL "$public_base_url"
     write_env_line DATABASE_URL "postgres://${DB_USER}:${DB_PASSWORD}@localhost:5432/${DB_NAME}"
     write_env_line JWT_SECRET "$JWT_SECRET"
-    write_env_line COOKIE_SECURE false
+    write_env_line COOKIE_SECURE "$cookie_secure"
     write_env_line UPLOAD_DIR /var/lib/eventlotse/uploads
     write_env_line ADMIN_EMAIL "$ADMIN_EMAIL"
     write_env_line ADMIN_PASSWORD "$ADMIN_PASSWORD"

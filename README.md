@@ -6,7 +6,7 @@ Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.17` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.4.18` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
@@ -140,6 +140,12 @@ Oder mit eigenen Pfaden:
 
 ```bash
 sudo APP_DIR=/opt/eventlotse ./scripts/update-ubuntu-24.04.sh
+```
+
+Wenn Nginx/Links auf eine echte Domain zeigen sollen, gib die Domain beim Update mit. Das Script synchronisiert dann `PUBLIC_BASE_URL` in `/etc/eventlotse/eventlotse.env`; bei vorhandenem Let's-Encrypt-Zertifikat wird automatisch `https://...` und `COOKIE_SECURE=true` gesetzt.
+
+```bash
+sudo SERVER_NAME=eventlotse.schellenberger.biz ./scripts/update-ubuntu-24.04.sh
 ```
 
 ### Backups

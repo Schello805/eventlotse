@@ -89,6 +89,54 @@ repair_env_file() {
   fi
 }
 
+set_env_value() {
+  local key="$1"
+  local value="${2:-}"
+  if grep -q "^${key}=" "$ENV_FILE"; then
+    sed -i "s|^${key}=.*|${key}=$(quote_env_value "$value")|" "$ENV_FILE"
+  else
+    write_env_line "$key" "$value" >> "$ENV_FILE"
+  fi
+}
+
+public_base_url_for_server_name() {
+  if [ -n "${PUBLIC_BASE_URL_OVERRIDE:-}" ]; then
+    printf '%s\n' "$PUBLIC_BASE_URL_OVERRIDE"
+    return
+  fi
+
+  if [ "$SERVER_NAME" = "_" ]; then
+    printf 'http://_\n'
+    return
+  fi
+
+  if [ -f "/etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/${SERVER_NAME}/privkey.pem" ]; then
+    printf 'https://%s\n' "$SERVER_NAME"
+  else
+    printf 'http://%s\n' "$SERVER_NAME"
+  fi
+}
+
+sync_public_runtime_env() {
+  if [ "$SERVER_NAME" = "_" ] && [ -z "${PUBLIC_BASE_URL_OVERRIDE:-}" ]; then
+    return
+  fi
+
+  local desired_url desired_secure current_url
+  desired_url="$(public_base_url_for_server_name)"
+  desired_secure=false
+  if [[ "$desired_url" == https://* ]]; then
+    desired_secure=true
+  fi
+
+  current_url="$(sed -n 's/^PUBLIC_BASE_URL=//p' "$ENV_FILE" | tail -n 1 | sed "s/^'//;s/'$//")"
+  if [ "$current_url" != "$desired_url" ]; then
+    log "Synchronisiere PUBLIC_BASE_URL auf ${desired_url}."
+    set_env_value PUBLIC_BASE_URL "$desired_url"
+  fi
+  set_env_value COOKIE_SECURE "$desired_secure"
+}
+
 load_env() {
   set -a
   # shellcheck disable=SC1090
@@ -309,6 +357,7 @@ main() {
   ensure_packages
   ensure_env_file
   repair_env_file
+  sync_public_runtime_env
   ensure_database
   load_env
   install -d -m 0750 -o www-data -g www-data "${UPLOAD_DIR:-/var/lib/eventlotse/uploads}"
