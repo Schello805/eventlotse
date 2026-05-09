@@ -97,6 +97,7 @@ type EventPlan = {
   location: string
   mapUrl: string
   contact: string
+  photoUrl: string
   members: Member[]
   actions: ActionCard[]
   budget: BudgetLine[]
@@ -237,6 +238,7 @@ function normalizeRole(role: string): Role {
 function normalizeEvent(event: EventPlan): EventPlan {
   return {
     ...event,
+    photoUrl: event.photoUrl || '',
     members: event.members.map((member) => ({ ...member, role: normalizeRole(member.role) })),
   }
 }
@@ -401,6 +403,7 @@ function App() {
       location: data.location || '',
       mapUrl: '',
       contact: '',
+      photoUrl: '',
       members: [{ id: uid(), name: 'Michael', email: session.email, role: 'Admin' }],
       actions: [],
       budget: [],
@@ -731,13 +734,19 @@ function AdminLocked() {
 
 function LoginRequired() {
   return (
-    <section className="panel login-required">
-      <div className="section-head">
-        <h2>Login erforderlich</h2>
-        <Lock size={18} />
+    <section className="login-required">
+      <div className="login-copy">
+        <span className="eyebrow dark"><ShieldCheck size={14} /> Geschützter Eventlotse</span>
+        <h1>Private Veranstaltungen sicher planen.</h1>
+        <p>Eventlotse bündelt Event-Steckbrief, Aufgaben, Team, Infrastruktur, Ablaufplan, Budget, Dateien und Fotoalbum-Links in einer selbst gehosteten App.</p>
+        <p className="help-text">Melde dich oben rechts an, um deine Veranstaltungen zu sehen oder ein neues Event anzulegen.</p>
       </div>
-      <p>Eventlotse zeigt Veranstaltungen und Arbeitsdaten erst nach erfolgreicher Anmeldung.</p>
-      <p className="help-text">Melde dich oben rechts an. Danach kannst du Events anlegen, öffnen und bearbeiten.</p>
+      <div className="login-feature-grid">
+        <div><KanbanSquare size={18} /><strong>Aufgaben</strong><span>Kanban, Verantwortliche, Fälligkeiten und Dateien.</span></div>
+        <div><Users size={18} /><strong>Team</strong><span>Einladungen, Rollen und Zugriff pro Event.</span></div>
+        <div><Clock3 size={18} /><strong>Ablauf</strong><span>Runsheet, Aufbau, Abbau und Programmpunkte.</span></div>
+        <div><ShieldCheck size={18} /><strong>Self-Hosting</strong><span>PostgreSQL, Auditlog, SMTP und eigene Domain.</span></div>
+      </div>
     </section>
   )
 }
@@ -1185,7 +1194,9 @@ function EventWorkspace({
               <EditableField label="Zielgruppe" help="Wer soll kommen? Zum Beispiel Familie, Nachbarschaft, Vereinsmitglieder oder eingeladene Gäste." value={event.targetGroup} onChange={(targetGroup) => updateEvent({ ...event, targetGroup })} disabled={!isAdmin} />
               <EditableField label="Karten-Link" help="Link zu Google Maps, Apple Karten oder einem Lageplan." value={event.mapUrl} onChange={(mapUrl) => updateEvent({ ...event, mapUrl })} disabled={!isAdmin} />
               <EditableField label="Kontakt vor Ort" help="Person, Telefonnummer oder Hinweis für Schlüssel, Zugang und Strom." value={event.contact} onChange={(contact) => updateEvent({ ...event, contact })} disabled={!isAdmin} />
+              <EditableField label="Fotoalbum-Link" help="Link zu Nextcloud, Dropbox, Google Fotos oder einem Ordner, in dem Fotos während und nach dem Event gesammelt werden." value={event.photoUrl} onChange={(photoUrl) => updateEvent({ ...event, photoUrl })} disabled={!isAdmin} />
             </div>
+            {event.photoUrl && <a className="ghost album-link" href={event.photoUrl} target="_blank" rel="noreferrer">Fotoalbum öffnen</a>}
           </section>
 
           <section className="panel">

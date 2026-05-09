@@ -337,6 +337,62 @@ textarea {
   gap: 12px;
 }
 
+.login-required {
+  min-height: min(560px, calc(100vh - 180px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.login-copy,
+.login-feature-grid div {
+  border: 1px solid #dce2ea;
+  border-radius: 8px;
+  background: white;
+}
+
+.login-copy {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: 28px;
+}
+
+.login-copy h1 {
+  max-width: 720px;
+  margin: 0;
+  font-size: clamp(30px, 5vw, 54px);
+}
+
+.login-copy p {
+  max-width: 680px;
+  color: #415066;
+}
+
+.login-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.login-feature-grid div {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  padding: 14px;
+}
+
+.login-feature-grid svg {
+  color: #0f766e;
+}
+
+.login-feature-grid span {
+  color: #627084;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .home-hero {
   min-width: 0;
   width: 100%;
@@ -828,6 +884,10 @@ form {
 
 .profile-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.album-link {
+  margin-top: 12px;
 }
 
 .field span {
@@ -1477,7 +1537,8 @@ form {
   }
 
   .home-hero,
-  .home-layout {
+  .home-layout,
+  .login-required {
     grid-template-columns: 1fr;
   }
 

@@ -21,6 +21,7 @@ import { mergeAppSettings, sanitizeAppSettings } from './settings.js'
 const app = express()
 const distDir = path.join(config.rootDir, 'dist')
 const packageJson = JSON.parse(fs.readFileSync(path.join(config.rootDir, 'package.json'), 'utf8'))
+const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 12, standardHeaders: true, legacyHeaders: false })
 const upload = multer({
   dest: config.uploadDir,
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -28,6 +29,7 @@ const upload = multer({
 
 fs.mkdirSync(config.uploadDir, { recursive: true })
 
+app.disable('x-powered-by')
 app.set('trust proxy', 1)
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -60,9 +62,19 @@ function signToken(user) {
 function setAuthCookie(response, token) {
   response.cookie('eventlotse_token', token, {
     httpOnly: true,
+    path: '/',
     sameSite: 'lax',
     secure: config.cookieSecure,
     maxAge: 7 * 24 * 60 * 60 * 1000,
+  })
+}
+
+function clearAuthCookie(response) {
+  response.clearCookie('eventlotse_token', {
+    httpOnly: true,
+    path: '/',
+    sameSite: 'lax',
+    secure: config.cookieSecure,
   })
 }
 
@@ -213,7 +225,7 @@ app.get('/version.json', (_request, response) => {
   response.json({ name: 'Eventlotse', version: packageJson.version })
 })
 
-app.post('/api/auth/login', async (request, response) => {
+app.post('/api/auth/login', authLimiter, async (request, response) => {
   const { email, password } = request.body || {}
   const result = await query('SELECT * FROM users WHERE email = $1', [String(email || '').toLowerCase()])
   const user = result.rows[0]
@@ -226,9 +238,20 @@ app.post('/api/auth/login', async (request, response) => {
   response.json({ user: publicUser(user) })
 })
 
-app.post('/api/auth/logout', requireAuth, async (request, response) => {
-  response.clearCookie('eventlotse_token')
-  await audit(request.user, 'Benutzer hat sich abgemeldet.')
+app.post('/api/auth/logout', async (request, response) => {
+  let user = null
+  const token = request.cookies.eventlotse_token
+  if (token) {
+    try {
+      const payload = jwt.verify(token, config.jwtSecret)
+      const result = await query('SELECT id, email, name, role, active, last_login_at FROM users WHERE id = $1', [payload.sub])
+      user = result.rows[0] || null
+    } catch {
+      user = null
+    }
+  }
+  clearAuthCookie(response)
+  if (user) await audit(user, 'Benutzer hat sich abgemeldet.')
   response.json({ ok: true })
 })
 
