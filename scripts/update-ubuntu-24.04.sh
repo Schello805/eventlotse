@@ -14,6 +14,9 @@ REMINDER_HOUR="${REMINDER_HOUR:-8}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-info@schellenberger.biz}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -base64 18 | tr -d '\n')}"
 SYSTEMD_SERVICE="/etc/systemd/system/eventlotse.service"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/eventlotse}"
+SKIP_BACKUP="${SKIP_BACKUP:-false}"
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-30}"
 
 log() {
   printf '\n[Eventlotse] %s\n' "$1"
@@ -38,7 +41,7 @@ require_root() {
 ensure_packages() {
   log "Prüfe Systempakete."
   apt-get update
-  apt-get install -y postgresql postgresql-client openssl sudo
+  apt-get install -y postgresql postgresql-client openssl sudo curl gzip
   systemctl enable postgresql
   systemctl start postgresql
 }
@@ -117,12 +120,27 @@ ensure_database() {
     sudo -u postgres createdb -O "${db_user}" "${db_name}"
 }
 
-ensure_systemd_service() {
-  if [ -f "$SYSTEMD_SERVICE" ]; then
+backup_current_state() {
+  if [ "$SKIP_BACKUP" = "true" ]; then
+    log "Backup übersprungen, weil SKIP_BACKUP=true gesetzt ist."
     return
   fi
 
-  log "Lege systemd-Service für bestehende Installation an."
+  load_env
+  local stamp
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  install -d -m 0750 "$BACKUP_DIR"
+  log "Erstelle Backup unter ${BACKUP_DIR}."
+  cp "$ENV_FILE" "${BACKUP_DIR}/eventlotse-${stamp}.env"
+  chmod 0600 "${BACKUP_DIR}/eventlotse-${stamp}.env"
+  if command -v pg_dump >/dev/null 2>&1; then
+    pg_dump "$DATABASE_URL" | gzip > "${BACKUP_DIR}/eventlotse-${stamp}.sql.gz"
+    chmod 0600 "${BACKUP_DIR}/eventlotse-${stamp}.sql.gz"
+  fi
+}
+
+ensure_systemd_service() {
+  log "Synchronisiere systemd-Service."
   cat > "$SYSTEMD_SERVICE" <<SERVICE
 [Unit]
 Description=Eventlotse
@@ -146,6 +164,27 @@ SERVICE
   systemctl enable eventlotse
 }
 
+restart_and_check() {
+  load_env
+  log "Starte Eventlotse neu."
+  systemctl restart eventlotse
+  systemctl is-active --quiet eventlotse
+
+  local health_url="http://${HOST:-127.0.0.1}:${PORT:-$APP_PORT}/api/health"
+  log "Prüfe Healthcheck ${health_url}."
+  for _ in $(seq 1 "$HEALTH_TIMEOUT"); do
+    if curl -fsS "$health_url" >/dev/null; then
+      log "Eventlotse läuft."
+      return
+    fi
+    sleep 1
+  done
+
+  echo "Eventlotse antwortet nach ${HEALTH_TIMEOUT}s nicht auf den Healthcheck." >&2
+  journalctl -u eventlotse -n 80 --no-pager >&2 || true
+  exit 1
+}
+
 main() {
   require_root
 
@@ -158,8 +197,10 @@ main() {
   ensure_env_file
   repair_env_file
   ensure_database
-  install -d -m 0750 -o www-data -g www-data /var/lib/eventlotse/uploads
+  load_env
+  install -d -m 0750 -o www-data -g www-data "${UPLOAD_DIR:-/var/lib/eventlotse/uploads}"
   ensure_systemd_service
+  backup_current_state
 
   log "Hole neueste Version."
   git -C "$APP_DIR" pull --ff-only
@@ -171,16 +212,15 @@ main() {
   npm run db:migrate
   npm run build
 
-  chown -R www-data:www-data "$APP_DIR"
-
-  systemctl restart eventlotse
+  install -d -m 0750 -o www-data -g www-data "${UPLOAD_DIR:-/var/lib/eventlotse/uploads}"
+  restart_and_check
 
   if command -v nginx >/dev/null 2>&1; then
     nginx -t
     systemctl reload nginx
   fi
 
-  log "Update abgeschlossen."
+  log "Update abgeschlossen. Aktiver Stand: $(git -C "$APP_DIR" rev-parse --short HEAD)"
 }
 
 main "$@"
