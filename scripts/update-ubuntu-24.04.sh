@@ -207,10 +207,11 @@ main() {
 
   log "Installiere Abhängigkeiten und baue die App."
   cd "$APP_DIR"
-  npm ci
+  npm ci --include=dev
   load_env
   npm run db:migrate
   npm run build
+  npm prune --omit=dev
 
   install -d -m 0750 -o www-data -g www-data "${UPLOAD_DIR:-/var/lib/eventlotse/uploads}"
   restart_and_check
