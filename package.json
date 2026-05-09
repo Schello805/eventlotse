@@ -1,7 +1,7 @@
 {
   "name": "eventlotse",
   "private": true,
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Self-hosted planning app for private events, teams, tasks, runsheets, budgets and booking.",
   "license": "PolyForm-Noncommercial-1.0.0",
   "homepage": "https://github.com/Schello805/eventlotse",

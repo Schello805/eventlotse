@@ -173,7 +173,7 @@ restart_and_check() {
   local health_url="http://${HOST:-127.0.0.1}:${PORT:-$APP_PORT}/api/health"
   log "Prüfe Healthcheck ${health_url}."
   for _ in $(seq 1 "$HEALTH_TIMEOUT"); do
-    if curl -fsS "$health_url" >/dev/null; then
+    if curl -fs "$health_url" >/dev/null; then
       log "Eventlotse läuft."
       return
     fi
