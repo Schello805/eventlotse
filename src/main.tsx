@@ -14,6 +14,15 @@ createRoot(document.getElementById('root')!).render(
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => undefined)
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((registration) => registration.update())
+      .catch(() => undefined)
+  })
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (sessionStorage.getItem('eventlotse-sw-reloaded') === '1') return
+    sessionStorage.setItem('eventlotse-sw-reloaded', '1')
+    window.location.reload()
   })
 }
