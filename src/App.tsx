@@ -1293,8 +1293,10 @@ function EventWorkspace({
 
           <section className="panel">
             <div className="section-head">
-              <h2>Infrastruktur</h2>
-              <HelpHint text="Checkliste für Dinge, die vor Ort vorhanden, organisiert oder genehmigt sein müssen." />
+              <div>
+                <h2>Infrastruktur-Checkliste</h2>
+                <p className="help-text">Diese Haken sind unabhängig vom Team: Markiere, was für den Ort organisiert, geprüft oder genehmigt werden muss.</p>
+              </div>
             </div>
             <div className="check-grid">
               {infrastructureOptions.map((item) => (
@@ -1340,11 +1342,24 @@ function EventWorkspace({
             </section>
             <section className="panel">
               <div className="section-head">
-                <h2>Künstler & Booking</h2>
-                <HelpHint text="Früher oft als „Act“ bezeichnet: gemeint sind DJs, Bands, Redner oder andere Programmpunkte." />
+                <div>
+                  <h2>Programmpunkte & Booking</h2>
+                  <p className="help-text">Für DJs, Bands, Redner oder andere Programmpunkte: Kontakt, Gage, Ankunft, Technikbedarf und Absprachen.</p>
+                </div>
                 <Music size={18} />
               </div>
-              <textarea value={event.actNotes} onChange={(change) => updateEvent({ ...event, actNotes: change.target.value })} placeholder="Kontakte, Gage, Ankunft, Tech-Rider, Absprachen..." disabled={!isAdmin} />
+              <textarea
+                value={event.actNotes}
+                onChange={(change) => updateEvent({ ...event, actNotes: change.target.value })}
+                placeholder={`Beispiel:
+Amaya Luna
+Kontakt: amaya@example.de
+Gage: 300 EUR
+Ankunft: 18:30 Uhr
+Technik: 2x XLR, Monitor, Strom
+Absprachen: 45 Minuten Set, Rechnung folgt`}
+                disabled={!isAdmin}
+              />
             </section>
             <InfoPanel icon={<FileText />} title="Wiki" help="Gemeinsames Wissen: Protokolle, Anleitungen, Lessons Learned und wiederkehrende Abläufe." items={event.wiki} emptyText="Noch keine Notizen. Sammle hier Lessons Learned, Anleitungen und Protokolle." />
             <section className="panel">
@@ -2034,7 +2049,7 @@ function InfoPanel({
 
 function HelpHint({ text }: { text: string }) {
   return (
-    <span className="help-icon" title={text} aria-label={text}>
+    <span className="help-icon" data-tooltip={text} aria-label={text} tabIndex={0}>
       <CircleHelp size={14} />
     </span>
   )
