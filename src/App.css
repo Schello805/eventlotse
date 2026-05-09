@@ -21,7 +21,7 @@
   border-bottom: 1px solid #d9dee7;
   backdrop-filter: blur(14px);
   max-width: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .brand {
@@ -301,9 +301,7 @@ textarea {
   align-items: center;
   border-radius: 8px;
   border: 1px solid #dce2ea;
-  background:
-    linear-gradient(105deg, rgba(255, 255, 255, 0.96), rgba(236, 247, 245, 0.9)),
-    url('/logo.png') right 26px center / 112px 112px no-repeat;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0.96), rgba(236, 247, 245, 0.9));
   box-shadow: 0 10px 30px rgba(25, 38, 63, 0.06);
 }
 
@@ -1442,9 +1440,7 @@ form {
   .home-hero {
     min-height: auto;
     padding: 22px;
-    background:
-      linear-gradient(105deg, rgba(255, 255, 255, 0.96), rgba(236, 247, 245, 0.9)),
-      url('/logo.png') right 18px top 18px / 92px 92px no-repeat;
+    background: linear-gradient(105deg, rgba(255, 255, 255, 0.96), rgba(236, 247, 245, 0.9));
   }
 
   .event-card-grid {

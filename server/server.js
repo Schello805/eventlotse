@@ -15,7 +15,8 @@ import PDFDocument from 'pdfkit'
 import { config } from './config.js'
 import { encryptSecret } from './crypto-box.js'
 import { pool, query, transaction } from './db.js'
-import { createTransport, invitationMail, reminderMail, testMail } from './mail.js'
+import { createTransport, invitationMail, passwordResetMail, reminderMail, testMail } from './mail.js'
+import { mergeAppSettings, sanitizeAppSettings } from './settings.js'
 
 const app = express()
 const distDir = path.join(config.rootDir, 'dist')
@@ -102,6 +103,11 @@ function publicUser(user) {
     active: user.active,
     lastLogin: user.last_login_at ? new Date(user.last_login_at).toLocaleString('de-DE') : 'noch nie',
   }
+}
+
+async function loadStoredSettings() {
+  const result = await query("SELECT value FROM settings WHERE key = 'app'")
+  return result.rows[0]?.value || {}
 }
 
 function eventFromRow(row) {
@@ -281,7 +287,7 @@ app.get('/api/bootstrap', requireAuth, async (request, response) => {
       [request.user.id],
     )
   const settings = request.user.role === 'Admin'
-    ? (await query("SELECT value FROM settings WHERE key = 'app'")).rows[0]?.value
+    ? mergeAppSettings(await loadStoredSettings())
     : null
   const users = request.user.role === 'Admin'
     ? (await query('SELECT id, email, name, role, active, last_login_at FROM users ORDER BY created_at DESC')).rows.map(publicUser)
@@ -297,7 +303,7 @@ app.get('/api/bootstrap', requireAuth, async (request, response) => {
 
   response.json({
     events: eventsResult.rows.map(eventFromRow),
-    settings: settings ? { ...settings, smtpPass: settings.smtpPass ? '********' : '' } : null,
+    settings: settings ? sanitizeAppSettings(settings) : null,
     users,
     auditLog,
   })
@@ -374,7 +380,8 @@ app.post('/api/events/:eventId/members', requireAuth, async (request, response) 
   await query('UPDATE events SET data = $1, updated_at = now() WHERE id = $2', [JSON.stringify(updatedEvent), request.params.eventId])
 
   const transport = await createTransport()
-  const inviteUrl = `${config.publicBaseUrl}/invite/${inviteToken}`
+  const settings = mergeAppSettings(await loadStoredSettings())
+  const inviteUrl = `${settings.baseUrl}/invite/${inviteToken}`
   await transport.sendMail(await invitationMail({ to: normalizedEmail, event: updatedEvent, inviter: request.user.email, inviteUrl }))
   await audit(request.user, `Einladung an "${normalizedEmail}" für "${event.name}" wurde versendet.`)
   response.status(201).json({ user: publicUser(user), event: updatedEvent, inviteUrl, initialPassword: config.nodeEnv === 'development' ? tempPassword : undefined })
@@ -570,8 +577,79 @@ app.post('/api/admin/test-mail', requireAuth, requireAdmin, async (request, resp
   }
 })
 
+app.post('/api/admin/users', requireAuth, requireAdmin, async (request, response) => {
+  const { email, name = '', role = 'Helfer' } = request.body || {}
+  const normalizedEmail = String(email || '').toLowerCase().trim()
+  if (!normalizedEmail.includes('@')) return response.status(400).json({ message: 'Bitte eine gültige E-Mail-Adresse eingeben.' })
+  const tempPassword = crypto.randomBytes(16).toString('base64url')
+  const passwordHash = await bcrypt.hash(tempPassword, 12)
+  const result = await query(
+    `INSERT INTO users (email, name, password_hash, role, active)
+     VALUES ($1, $2, $3, $4, true)
+     ON CONFLICT (email) DO UPDATE
+       SET name = COALESCE(NULLIF(EXCLUDED.name, ''), users.name),
+           role = EXCLUDED.role,
+           active = true,
+           updated_at = now()
+     RETURNING id, email, name, role, active, last_login_at`,
+    [normalizedEmail, String(name || '').trim() || normalizedEmail.split('@')[0], passwordHash, role],
+  )
+  await audit(request.user, `Benutzer "${normalizedEmail}" wurde hinzugefügt.`)
+  response.status(201).json({ user: publicUser(result.rows[0]) })
+})
+
+app.patch('/api/admin/users/:userId', requireAuth, requireAdmin, async (request, response) => {
+  const { name, role, active } = request.body || {}
+  const result = await query(
+    `UPDATE users
+     SET name = COALESCE($1, name),
+         role = COALESCE($2, role),
+         active = COALESCE($3, active),
+         updated_at = now()
+     WHERE id = $4
+     RETURNING id, email, name, role, active, last_login_at`,
+    [
+      typeof name === 'string' ? name.trim() : null,
+      ['Admin', 'Helfer', 'Künstler'].includes(role) ? role : null,
+      typeof active === 'boolean' ? active : null,
+      request.params.userId,
+    ],
+  )
+  if (!result.rowCount) return response.status(404).json({ message: 'Benutzer nicht gefunden.' })
+  await audit(request.user, `Benutzer "${result.rows[0].email}" wurde aktualisiert.`)
+  response.json({ user: publicUser(result.rows[0]) })
+})
+
+app.delete('/api/admin/users/:userId', requireAuth, requireAdmin, async (request, response) => {
+  if (request.params.userId === request.user.id) {
+    return response.status(400).json({ message: 'Du kannst deinen eigenen Admin-Benutzer nicht löschen.' })
+  }
+  const result = await query('DELETE FROM users WHERE id = $1 RETURNING email', [request.params.userId])
+  if (!result.rowCount) return response.status(404).json({ message: 'Benutzer nicht gefunden.' })
+  await audit(request.user, `Benutzer "${result.rows[0].email}" wurde gelöscht.`)
+  response.json({ ok: true })
+})
+
+app.post('/api/admin/users/:userId/reset-password', requireAuth, requireAdmin, async (request, response) => {
+  const userResult = await query('SELECT id, email, name FROM users WHERE id = $1', [request.params.userId])
+  const user = userResult.rows[0]
+  if (!user) return response.status(404).json({ message: 'Benutzer nicht gefunden.' })
+  const inviteToken = crypto.randomBytes(32).toString('base64url')
+  await query(
+    `INSERT INTO invite_tokens (token, user_id, event_id, expires_at)
+     VALUES ($1, $2, NULL, now() + interval '14 days')`,
+    [inviteToken, user.id],
+  )
+  const settings = mergeAppSettings(await loadStoredSettings())
+  const resetUrl = `${settings.baseUrl}/invite/${inviteToken}`
+  const transport = await createTransport()
+  await transport.sendMail(await passwordResetMail({ to: user.email, name: user.name, resetUrl, actor: request.user.email }))
+  await audit(request.user, `Passwort-Reset für "${user.email}" wurde versendet.`)
+  response.json({ ok: true })
+})
+
 app.put('/api/admin/settings', requireAuth, requireAdmin, async (request, response) => {
-  const current = (await query("SELECT value FROM settings WHERE key = 'app'")).rows[0]?.value || {}
+  const current = mergeAppSettings(await loadStoredSettings())
   const next = {
     ...current,
     ...request.body,
@@ -583,7 +661,7 @@ app.put('/api/admin/settings', requireAuth, requireAdmin, async (request, respon
     [JSON.stringify(next)],
   )
   await audit(request.user, 'Systemeinstellungen wurden gespeichert.')
-  response.json({ settings: { ...next, smtpPass: next.smtpPass ? '********' : '' } })
+  response.json({ settings: sanitizeAppSettings(next) })
 })
 
 app.post('/api/admin/reminders/run', requireAuth, requireAdmin, async (request, response) => {

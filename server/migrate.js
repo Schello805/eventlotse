@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import { config } from './config.js'
 import { encryptSecret } from './crypto-box.js'
 import { query } from './db.js'
+import { appSettingsFromEnv, isPlaceholderValue, mergeAppSettings } from './settings.js'
 
 const schema = `
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -95,24 +96,28 @@ async function main() {
     `INSERT INTO settings (key, value)
      VALUES ('app', $1)
      ON CONFLICT (key) DO NOTHING`,
-    [JSON.stringify({
-      baseUrl: config.publicBaseUrl,
-      smtpHost: config.smtp.host,
-      smtpPort: config.smtp.port,
-      smtpUser: config.smtp.user,
-      smtpPass: encryptSecret(config.smtp.pass),
-      smtpFrom: config.smtp.from,
-      smtpTls: !config.smtp.secure,
-    })],
+    [JSON.stringify(appSettingsFromEnv())],
   )
   const settings = await query("SELECT value FROM settings WHERE key = 'app'")
-  const value = settings.rows[0]?.value
+  let value = settings.rows[0]?.value
   if (value?.smtpPass && !String(value.smtpPass).startsWith('enc:v1:') && value.smtpPass !== '********') {
     await query(
       "UPDATE settings SET value = jsonb_set(value, '{smtpPass}', to_jsonb($1::text), true), updated_at = now() WHERE key = 'app'",
       [encryptSecret(value.smtpPass)],
     )
+    value = { ...value, smtpPass: encryptSecret(value.smtpPass) }
     console.log('[Eventlotse] SMTP-Passwort wurde verschlüsselt.')
+  }
+  const envSettings = appSettingsFromEnv()
+  const shouldRefreshFromEnv = ['baseUrl', 'smtpHost', 'smtpUser', 'smtpFrom'].some(
+    (key) => isPlaceholderValue(value?.[key]) && !isPlaceholderValue(envSettings[key]),
+  )
+  if (shouldRefreshFromEnv || (!value?.smtpPass && envSettings.smtpPass)) {
+    await query(
+      "UPDATE settings SET value = $1, updated_at = now() WHERE key = 'app'",
+      [JSON.stringify(mergeAppSettings(value || {}))],
+    )
+    console.log('[Eventlotse] Einstellungen wurden mit .env-Werten ergänzt.')
   }
   console.log('[Eventlotse] Datenbank ist aktuell.')
   process.exit(0)

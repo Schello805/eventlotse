@@ -1,19 +1,14 @@
 import nodemailer from 'nodemailer'
-import { config } from './config.js'
-import { decryptSecret } from './crypto-box.js'
 import { query } from './db.js'
+import { mailSettingsFromAppSettings, mergeAppSettings } from './settings.js'
+
+async function getAppSettings() {
+  const result = await query("SELECT value FROM settings WHERE key = 'app'")
+  return mergeAppSettings(result.rows[0]?.value || {})
+}
 
 export async function getMailSettings() {
-  const result = await query("SELECT value FROM settings WHERE key = 'app'")
-  const stored = result.rows[0]?.value || {}
-  return {
-    host: stored.smtpHost || config.smtp.host,
-    port: Number(stored.smtpPort || config.smtp.port),
-    user: stored.smtpUser || config.smtp.user,
-    pass: stored.smtpPass && stored.smtpPass !== '********' ? decryptSecret(stored.smtpPass) : config.smtp.pass,
-    from: stored.smtpFrom || config.smtp.from,
-    secure: stored.smtpTls === false ? true : config.smtp.secure,
-  }
+  return mailSettingsFromAppSettings(await getAppSettings())
 }
 
 export async function createTransport() {
@@ -98,6 +93,7 @@ export async function invitationMail({ to, event, inviter, inviteUrl }) {
 
 export async function testMail(to) {
   const settings = await getMailSettings()
+  const appSettings = await getAppSettings()
   return {
     from: settings.from,
     to,
@@ -105,12 +101,32 @@ export async function testMail(to) {
     html: baseTemplate({
       title: 'Eventlotse Mailversand funktioniert',
       intro: 'Diese Testmail bestätigt, dass SMTP grundsätzlich erreichbar ist.',
-      buttonUrl: config.publicBaseUrl,
+      buttonUrl: appSettings.baseUrl,
       buttonLabel: 'Eventlotse öffnen',
       sections: [
-        { label: 'Base URL', value: config.publicBaseUrl },
-        { label: 'SMTP Host', value: config.smtp.host || 'JSON-Testtransport in Entwicklung' },
+        { label: 'Base URL', value: appSettings.baseUrl },
+        { label: 'SMTP Host', value: settings.host || 'JSON-Testtransport in Entwicklung' },
         { label: 'Zeitpunkt', value: new Date().toLocaleString('de-DE') },
+      ],
+    }),
+  }
+}
+
+export async function passwordResetMail({ to, name, resetUrl, actor }) {
+  const settings = await getMailSettings()
+  return {
+    from: settings.from,
+    to,
+    subject: 'Eventlotse Passwort setzen',
+    html: baseTemplate({
+      title: 'Passwort für Eventlotse setzen',
+      intro: `${actor} hat für dich einen neuen Passwort-Link erstellt.`,
+      buttonUrl: resetUrl,
+      buttonLabel: 'Passwort setzen',
+      sections: [
+        { label: 'Benutzer', value: name || to },
+        { label: 'Gültigkeit', value: 'Der Link ist 14 Tage gültig und kann danach neu erstellt werden.' },
+        { label: 'Nächster Schritt', value: 'Klicke auf den Button und vergib ein eigenes Passwort mit mindestens 10 Zeichen.' },
       ],
     }),
   }

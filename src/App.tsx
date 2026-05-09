@@ -363,14 +363,14 @@ function App() {
         credentials: 'include',
         body: JSON.stringify({ email: session.email, password: loginPassword }),
       })
-      if (!response.ok) throw new Error('Login fehlgeschlagen.')
-      const data = await response.json()
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.message || 'Login fehlgeschlagen. Prüfe E-Mail, Passwort und Serverstatus.')
       setSession({ email: data.user.email, role: data.user.role, authenticated: true })
       setLoginPassword('')
       await loadRemoteData()
       notify('Anmeldung erfolgreich.')
-    } catch {
-      notify('Server-Login nicht erreichbar. Lokale Bearbeitung bleibt aktiv.')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Anmeldung nicht möglich. Bitte Server und Zugangsdaten prüfen.')
     }
   }
 
@@ -658,7 +658,13 @@ function AuthControl({
   return (
     <details className="auth-menu">
       <summary><Lock size={14} /> Anmelden</summary>
-      <div className="auth-menu-panel">
+      <form
+        className="auth-menu-panel"
+        onSubmit={(event) => {
+          event.preventDefault()
+          login()
+        }}
+      >
         <label className="field">
           <span>E-Mail</span>
           <input aria-label="Login E-Mail" value={session.email} onChange={(event) => setEmail(event.target.value)} />
@@ -673,9 +679,9 @@ function AuthControl({
             onChange={(event) => setPassword(event.target.value)}
           />
         </label>
-        <button className="primary" type="button" onClick={login}>Anmelden</button>
-        <p className="help-text">Ohne Server läuft Eventlotse lokal im Admin-Modus weiter.</p>
-      </div>
+        <button className="primary" type="submit">Anmelden</button>
+        <p className="help-text">Adminfunktionen sind erst nach erfolgreicher Anmeldung sichtbar.</p>
+      </form>
     </details>
   )
 }
@@ -1347,59 +1353,87 @@ function AdminPage({
     defaultValues: { name: '', email: '', role: 'Helfer' },
   })
 
-  const addUser = (data: UserFormValues) => {
-    setUsers((current) => [
-      ...current,
-      {
-        id: uid(),
-        name: data.name?.trim() || data.email.split('@')[0],
-        email: data.email.trim(),
-        role: data.role,
-        active: true,
-        lastLogin: 'noch nie',
-      },
-    ])
-    addAudit(`Benutzer "${data.email}" wurde hinzugefügt.`)
-    notify(`Benutzer "${data.email}" wurde hinzugefügt.`)
-    userForm.reset({ name: '', email: '', role: 'Helfer' })
+  const addUser = async (data: UserFormValues) => {
+    try {
+      const response = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(result?.message || 'Benutzer konnte nicht gespeichert werden.')
+      setUsers((current) => [...current.filter((user) => user.id !== result.user.id), result.user])
+      addAudit(`Benutzer "${result.user.email}" wurde hinzugefügt.`)
+      notify(`Benutzer "${result.user.email}" wurde hinzugefügt.`)
+      userForm.reset({ name: '', email: '', role: 'Helfer' })
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Benutzer konnte nicht gespeichert werden.')
+    }
   }
 
-  const updateUser = (userId: string, patch: Partial<AdminUser>) => {
+  const updateUser = async (userId: string, patch: Partial<AdminUser>) => {
     setUsers((current) => current.map((user) => (user.id === userId ? { ...user, ...patch } : user)))
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(patch),
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(result?.message || 'Benutzer konnte nicht aktualisiert werden.')
+      setUsers((current) => current.map((user) => (user.id === userId ? result.user : user)))
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Benutzer konnte nicht aktualisiert werden.')
+    }
   }
 
-  const deleteUser = (user: AdminUser) => {
+  const deleteUser = async (user: AdminUser) => {
     if (!window.confirm(`Benutzer ${user.email} wirklich löschen?`)) return
-    setUsers((current) => current.filter((entry) => entry.id !== user.id))
-    addAudit(`Benutzer "${user.email}" wurde gelöscht.`)
-    setToast({
-      message: `Benutzer ${user.email} gelöscht.`,
-      actionLabel: 'Rückgängig',
-      onAction: () => {
-        setUsers((current) => [...current, user])
-        addAudit(`Benutzer "${user.email}" wurde wiederhergestellt.`)
-        setToast(null)
-      },
-    })
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}`, { method: 'DELETE', credentials: 'include' })
+      const result = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(result?.message || 'Benutzer konnte nicht gelöscht werden.')
+      setUsers((current) => current.filter((entry) => entry.id !== user.id))
+      addAudit(`Benutzer "${user.email}" wurde gelöscht.`)
+      setToast({ message: `Benutzer ${user.email} gelöscht.` })
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Benutzer konnte nicht gelöscht werden.')
+    }
   }
 
-  const resetPassword = (user: AdminUser) => {
-    addAudit(`Passwort-Reset für "${user.email}" wurde ausgelöst.`)
-    notify(`Passwort-Reset für "${user.email}" wurde vorgemerkt.`)
+  const resetPassword = async (user: AdminUser) => {
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}/reset-password`, { method: 'POST', credentials: 'include' })
+      const result = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(result?.message || 'Passwort-Reset konnte nicht versendet werden.')
+      addAudit(`Passwort-Reset für "${user.email}" wurde versendet.`)
+      notify(`Passwort-Reset für "${user.email}" wurde per E-Mail versendet.`)
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Passwort-Reset konnte nicht versendet werden.')
+    }
   }
 
-  const saveSettings = (data: SettingsFormValues) => {
+  const saveSettings = async (data: SettingsFormValues) => {
     const nextSettings = { ...data, smtpPass: data.smtpPass ? '********' : settings.smtpPass }
     setSettings(nextSettings)
     addAudit('Systemeinstellungen wurden gespeichert.')
-    fetch('/api/admin/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(data),
-    }).catch(() => undefined)
-    settingsForm.reset({ ...nextSettings, smtpPass: '' })
-    notify('Systemeinstellungen wurden gespeichert.')
+    try {
+      const response = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(result?.message || 'Systemeinstellungen konnten nicht gespeichert werden.')
+      setSettings(result.settings)
+      settingsForm.reset({ ...result.settings, smtpPass: '' })
+      notify('Systemeinstellungen wurden gespeichert.')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Systemeinstellungen konnten nicht gespeichert werden.')
+    }
   }
 
   const sendTestMail = async () => {
