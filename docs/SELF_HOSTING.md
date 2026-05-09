@@ -57,6 +57,34 @@ server {
 sudo /opt/eventlotse/scripts/backup-postgres.sh
 ```
 
+Die Backups liegen standardmäßig unter `/var/backups/eventlotse` und werden als komprimierte SQL-Dateien gespeichert.
+
+## Restore
+
+1. Eventlotse kurz stoppen:
+
+```bash
+sudo systemctl stop eventlotse
+```
+
+2. Passende Backup-Datei auswählen und in die Datenbank zurückspielen:
+
+```bash
+set -a
+. /etc/eventlotse/eventlotse.env
+set +a
+gunzip -c /var/backups/eventlotse/eventlotse-YYYYMMDD-HHMMSS.sql.gz | psql "$DATABASE_URL"
+```
+
+3. Service wieder starten:
+
+```bash
+sudo systemctl start eventlotse
+sudo systemctl status eventlotse
+```
+
+Wenn du komplett auf einen neuen Server umziehst, zuerst Installation ausführen, dann Service stoppen, Restore einspielen und anschließend wieder starten.
+
 ## Enthaltene Produktionsbausteine
 
 - Backend-API mit Node.js und Express
@@ -69,12 +97,13 @@ sudo /opt/eventlotse/scripts/backup-postgres.sh
 - HTML-Testmail und HTML-Einladungsmail
 - Einladungslinks mit Passwort setzen
 - Dateidownload und Dateilöschung
-- iCal-, CSV- und PDF-Export
-- manueller Erinnerungslauf für fällige Aufgaben
+- iCal-, CSV-, XLSX- und PDF-Export
+- manueller und automatischer Erinnerungslauf für fällige Aufgaben
+- verschlüsselte Speicherung des SMTP-Passworts
 - Backup-Script für PostgreSQL
+- Restore-Anleitung
 
 ## Nächste Ausbaustufen
 
-- Excel-XLSX-Export zusätzlich zum CSV-Export
-- zeitgesteuerte Erinnerungen per Mail oder Push
-- SMTP-Passwort verschlüsselt speichern
+- Push-Erinnerungen zusätzlich zu E-Mail
+- feinere Rechte pro Aufgabenkarte

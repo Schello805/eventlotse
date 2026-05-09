@@ -4,6 +4,7 @@ import compression from 'compression'
 import cookieParser from 'cookie-parser'
 import crypto from 'node:crypto'
 import express from 'express'
+import ExcelJS from 'exceljs'
 import rateLimit from 'express-rate-limit'
 import fs from 'node:fs'
 import helmet from 'helmet'
@@ -12,6 +13,7 @@ import multer from 'multer'
 import path from 'node:path'
 import PDFDocument from 'pdfkit'
 import { config } from './config.js'
+import { encryptSecret } from './crypto-box.js'
 import { pool, query, transaction } from './db.js'
 import { createTransport, invitationMail, reminderMail, testMail } from './mail.js'
 
@@ -127,6 +129,57 @@ function formatIcsDate(date) {
 
 function csvCell(value) {
   return `"${String(value || '').replaceAll('"', '""')}"`
+}
+
+function dueTasksForEvent(event, today) {
+  return (event.actions || [])
+    .flatMap((action) => (action.tasks || []).map((task) => ({ ...task, actionTitle: action.title })))
+    .filter((task) => task.status !== 'done' && task.due && task.due <= today)
+}
+
+async function runDueReminders(actor = null) {
+  const today = new Date().toISOString().slice(0, 10)
+  const already = await query("SELECT value FROM settings WHERE key = 'reminders:lastRun'")
+  if (already.rows[0]?.value?.date === today) return []
+
+  const eventsResult = await query('SELECT id, data FROM events ORDER BY updated_at DESC')
+  const sent = []
+  const transport = await createTransport()
+
+  for (const row of eventsResult.rows) {
+    const event = eventFromRow(row)
+    const dueTasks = dueTasksForEvent(event, today)
+    if (!dueTasks.length) continue
+
+    const recipients = [...new Set((event.members || []).filter((member) => member.role !== 'Künstler').map((member) => member.email))]
+    for (const to of recipients) {
+      await transport.sendMail(await reminderMail({ to, event, tasks: dueTasks.slice(0, 8) }))
+      sent.push({ event: event.name, to, count: dueTasks.length })
+    }
+  }
+
+  await query(
+    `INSERT INTO settings (key, value, updated_at) VALUES ('reminders:lastRun', $1, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [JSON.stringify({ date: today, sent: sent.length })],
+  )
+  await audit(actor, `${sent.length} automatische Erinnerungsmails wurden verarbeitet.`)
+  return sent
+}
+
+function scheduleReminderWorker() {
+  if (config.nodeEnv === 'test') return
+  const tick = async () => {
+    const now = new Date()
+    if (now.getHours() < config.reminderHour) return
+    try {
+      await runDueReminders(null)
+    } catch (error) {
+      console.error('[Eventlotse] Erinnerungslauf fehlgeschlagen.', error)
+    }
+  }
+  setTimeout(tick, 30_000)
+  return setInterval(tick, 15 * 60 * 1000)
 }
 
 app.get('/api/health', (_request, response) => {
@@ -416,6 +469,58 @@ app.get('/api/events/:eventId/export/tasks.csv', requireAuth, async (request, re
   response.send(rows.map((row) => row.map(csvCell).join(';')).join('\n'))
 })
 
+app.get('/api/events/:eventId/export/tasks.xlsx', requireAuth, async (request, response) => {
+  if (!(await canReadEvent(request.user, request.params.eventId))) return response.status(403).send('Nicht erlaubt')
+  const eventResult = await query('SELECT id, data FROM events WHERE id = $1', [request.params.eventId])
+  if (!eventResult.rowCount) return response.status(404).send('Nicht gefunden')
+  const event = eventFromRow(eventResult.rows[0])
+  const workbook = new ExcelJS.Workbook()
+  workbook.creator = 'Eventlotse'
+  workbook.created = new Date()
+
+  const tasks = workbook.addWorksheet('Aufgaben')
+  tasks.columns = [
+    { header: 'Aktion', key: 'action', width: 24 },
+    { header: 'Aufgabe', key: 'task', width: 34 },
+    { header: 'Status', key: 'status', width: 14 },
+    { header: 'Fällig', key: 'due', width: 14 },
+    { header: 'Notizen', key: 'notes', width: 44 },
+  ]
+  ;(event.actions || []).forEach((action) => {
+    ;(action.tasks || []).forEach((task) => {
+      tasks.addRow({ action: action.title, task: task.title, status: task.status, due: task.due, notes: task.notes })
+    })
+  })
+
+  const runsheet = workbook.addWorksheet('Ablauf')
+  runsheet.columns = [
+    { header: 'Uhrzeit', key: 'time', width: 12 },
+    { header: 'Programmpunkt', key: 'title', width: 36 },
+    { header: 'Verantwortlich', key: 'owner', width: 28 },
+  ]
+  ;(event.runsheet || []).forEach((item) => runsheet.addRow(item))
+
+  const budget = workbook.addWorksheet('Budget')
+  budget.columns = [
+    { header: 'Bezeichnung', key: 'label', width: 34 },
+    { header: 'Typ', key: 'type', width: 14 },
+    { header: 'Betrag', key: 'amount', width: 14 },
+  ]
+  ;(event.budget || []).forEach((line) => budget.addRow(line))
+
+  for (const sheet of workbook.worksheets) {
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } }
+    sheet.views = [{ state: 'frozen', ySplit: 1 }]
+    sheet.autoFilter = { from: 'A1', to: `${String.fromCharCode(64 + sheet.columnCount)}1` }
+  }
+
+  response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  response.setHeader('Content-Disposition', `attachment; filename="${sanitizeFilename(event.name)}-eventlotse.xlsx"`)
+  await workbook.xlsx.write(response)
+  response.end()
+})
+
 app.get('/api/events/:eventId/export/runsheet.pdf', requireAuth, async (request, response) => {
   if (!(await canReadEvent(request.user, request.params.eventId))) return response.status(403).send('Nicht erlaubt')
   const eventResult = await query('SELECT id, data FROM events WHERE id = $1', [request.params.eventId])
@@ -470,7 +575,7 @@ app.put('/api/admin/settings', requireAuth, requireAdmin, async (request, respon
   const next = {
     ...current,
     ...request.body,
-    smtpPass: request.body.smtpPass && request.body.smtpPass !== '********' ? request.body.smtpPass : current.smtpPass,
+    smtpPass: request.body.smtpPass && request.body.smtpPass !== '********' ? encryptSecret(request.body.smtpPass) : current.smtpPass,
   }
   await query(
     `INSERT INTO settings (key, value, updated_at) VALUES ('app', $1, now())
@@ -482,26 +587,8 @@ app.put('/api/admin/settings', requireAuth, requireAdmin, async (request, respon
 })
 
 app.post('/api/admin/reminders/run', requireAuth, requireAdmin, async (request, response) => {
-  const eventsResult = await query('SELECT id, data FROM events ORDER BY updated_at DESC')
-  const today = new Date().toISOString().slice(0, 10)
-  const sent = []
-  const transport = await createTransport()
-
-  for (const row of eventsResult.rows) {
-    const event = eventFromRow(row)
-    const dueTasks = (event.actions || [])
-      .flatMap((action) => action.tasks || [])
-      .filter((task) => task.status !== 'done' && task.due && task.due <= today)
-    if (!dueTasks.length) continue
-
-    const recipients = [...new Set((event.members || []).filter((member) => member.role !== 'Künstler').map((member) => member.email))]
-    for (const to of recipients) {
-      await transport.sendMail(await reminderMail({ to, event, tasks: dueTasks.slice(0, 8) }))
-      sent.push({ event: event.name, to, count: dueTasks.length })
-    }
-  }
-
-  await audit(request.user, `${sent.length} Erinnerungsmails wurden versendet.`)
+  await query("DELETE FROM settings WHERE key = 'reminders:lastRun'")
+  const sent = await runDueReminders(request.user)
   response.json({ sent })
 })
 
@@ -524,9 +611,11 @@ server.on('error', (error) => {
   process.exit(1)
 })
 server.ref()
+const reminderTimer = scheduleReminderWorker()
 const keepAlive = setInterval(() => undefined, 60 * 60 * 1000)
 
 process.on('SIGTERM', async () => {
+  if (reminderTimer) clearInterval(reminderTimer)
   clearInterval(keepAlive)
   server.close()
   await pool.end()

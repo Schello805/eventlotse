@@ -29,9 +29,11 @@ Rev. `v0.4.0` enthält neben der Frontend-App jetzt auch eine erste Self-Hosting
 - eigenes Admin-Passwort direkt in der Adminseite ändern
 - sichere Einladungslinks mit Passwort setzen
 - Dateiliste mit Download und Löschen pro Event
-- iCal-Export, CSV-Aufgabenexport und PDF-Ablaufplan
-- manueller Erinnerungslauf für fällige Aufgaben
+- iCal-Export, CSV-/XLSX-Aufgabenexport und PDF-Ablaufplan
+- manueller und automatischer Erinnerungslauf für fällige Aufgaben
+- SMTP-Passwort wird verschlüsselt gespeichert
 - PostgreSQL-Migrationen, Upload-Endpunkt und Backup-Script
+- Restore-Anleitung für PostgreSQL-Backups
 - Echte App-Routen für Dashboard, Admin, Eventdetails und Rechtsseiten
 - Validierte Formulare mit `react-hook-form` und `zod`
 - Globale Suche, Event-Tabs, mobile Aufbauansicht, Leerzustände und Undo beim Benutzerlöschen

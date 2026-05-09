@@ -16,6 +16,7 @@ export const config = {
   publicBaseUrl: process.env.PUBLIC_BASE_URL || 'http://localhost:3000',
   adminEmail: process.env.ADMIN_EMAIL || 'admin@example.de',
   adminPassword: process.env.ADMIN_PASSWORD || 'Eventlotse-Start123!',
+  reminderHour: Number(process.env.REMINDER_HOUR || 8),
   smtp: {
     host: process.env.SMTP_HOST || '',
     port: Number(process.env.SMTP_PORT || 587),

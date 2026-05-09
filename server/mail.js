@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer'
 import { config } from './config.js'
+import { decryptSecret } from './crypto-box.js'
 import { query } from './db.js'
 
 export async function getMailSettings() {
@@ -9,7 +10,7 @@ export async function getMailSettings() {
     host: stored.smtpHost || config.smtp.host,
     port: Number(stored.smtpPort || config.smtp.port),
     user: stored.smtpUser || config.smtp.user,
-    pass: stored.smtpPass && stored.smtpPass !== '********' ? stored.smtpPass : config.smtp.pass,
+    pass: stored.smtpPass && stored.smtpPass !== '********' ? decryptSecret(stored.smtpPass) : config.smtp.pass,
     from: stored.smtpFrom || config.smtp.from,
     secure: stored.smtpTls === false ? true : config.smtp.secure,
   }

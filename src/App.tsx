@@ -1117,6 +1117,7 @@ function EventWorkspace({
               <div className="button-row">
                 <a className="ghost" href={`/api/events/${event.id}/calendar.ics`}><CalendarDays size={16} /> iCal</a>
                 <a className="ghost" href={`/api/events/${event.id}/export/tasks.csv`}><Download size={16} /> CSV</a>
+                <a className="ghost" href={`/api/events/${event.id}/export/tasks.xlsx`}><Download size={16} /> XLSX</a>
                 <a className="ghost" href={`/api/events/${event.id}/export/runsheet.pdf`}><FileText size={16} /> PDF</a>
                 <button className="ghost" onClick={exportJson}><Download size={16} /> JSON</button>
               </div>

@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs'
 import { config } from './config.js'
+import { encryptSecret } from './crypto-box.js'
 import { query } from './db.js'
 
 const schema = `
@@ -99,11 +100,20 @@ async function main() {
       smtpHost: config.smtp.host,
       smtpPort: config.smtp.port,
       smtpUser: config.smtp.user,
-      smtpPass: config.smtp.pass,
+      smtpPass: encryptSecret(config.smtp.pass),
       smtpFrom: config.smtp.from,
       smtpTls: !config.smtp.secure,
     })],
   )
+  const settings = await query("SELECT value FROM settings WHERE key = 'app'")
+  const value = settings.rows[0]?.value
+  if (value?.smtpPass && !String(value.smtpPass).startsWith('enc:v1:') && value.smtpPass !== '********') {
+    await query(
+      "UPDATE settings SET value = jsonb_set(value, '{smtpPass}', to_jsonb($1::text), true), updated_at = now() WHERE key = 'app'",
+      [encryptSecret(value.smtpPass)],
+    )
+    console.log('[Eventlotse] SMTP-Passwort wurde verschlüsselt.')
+  }
   console.log('[Eventlotse] Datenbank ist aktuell.')
   process.exit(0)
 }
