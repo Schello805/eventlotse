@@ -259,7 +259,7 @@ textarea {
 }
 
 .task-card textarea {
-  min-height: 96px;
+  min-height: 118px;
   font-size: 14px;
   line-height: 1.45;
 }
@@ -271,8 +271,8 @@ textarea {
   padding: 9px 10px;
 }
 
-.task-card input:first-child {
-  min-height: 44px;
+.task-card .task-title-input {
+  min-height: 74px;
   font-size: 15px;
   font-weight: 750;
 }
@@ -309,6 +309,28 @@ textarea {
 
 .task-details[open] {
   padding-top: 4px;
+}
+
+.action-picker-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.action-picker-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #0f5f59;
+  font-weight: 900;
+}
+
+.action-picker-summary small {
+  color: #627084;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .workspace {
@@ -1205,6 +1227,43 @@ form {
   color: #627084;
 }
 
+.info-strip {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #cde6dd;
+  border-radius: 8px;
+  background: #f1fbf7;
+  color: #345047;
+}
+
+.info-strip strong {
+  color: #0f5f59;
+}
+
+.runsheet-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.runsheet-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1.5fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid #dce2ea;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .owner-row {
   display: flex;
 }
@@ -1706,6 +1765,16 @@ form {
     width: 100%;
     max-width: none;
     min-height: 38px;
+  }
+
+  .action-picker-summary,
+  .runsheet-row {
+    grid-template-columns: 1fr;
+  }
+
+  .info-strip {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .global-search input {

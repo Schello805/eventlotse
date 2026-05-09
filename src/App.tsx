@@ -160,7 +160,7 @@ type StoredFile = {
   created_at: string
 }
 
-type EventTab = 'overview' | 'tasks' | 'team' | 'schedule'
+type EventTab = 'overview' | 'tasks' | 'team' | 'infrastructure' | 'schedule'
 
 type ToastState = {
   message: string
@@ -1442,6 +1442,28 @@ function EventWorkspace({
     notify('Ablaufpunkt wurde ergänzt.')
   }
 
+  const updateRunItem = (itemId: string, patch: Partial<RunItem>) => {
+    updateEvent({
+      ...event,
+      runsheet: event.runsheet.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
+    })
+  }
+
+  const moveRunItem = (itemId: string, direction: -1 | 1) => {
+    const index = event.runsheet.findIndex((item) => item.id === itemId)
+    const targetIndex = index + direction
+    if (index < 0 || targetIndex < 0 || targetIndex >= event.runsheet.length) return
+    const nextRunsheet = [...event.runsheet]
+    const [item] = nextRunsheet.splice(index, 1)
+    nextRunsheet.splice(targetIndex, 0, item)
+    updateEvent({ ...event, runsheet: nextRunsheet })
+  }
+
+  const deleteRunItem = (itemId: string) => {
+    updateEvent({ ...event, runsheet: event.runsheet.filter((item) => item.id !== itemId) })
+    notify('Ablaufpunkt wurde gelöscht.')
+  }
+
   const addWikiEntry = () => {
     if (!wikiDraft.trim()) return
     updateEvent({ ...event, wiki: [...event.wiki, wikiDraft.trim()] })
@@ -1492,6 +1514,7 @@ function EventWorkspace({
         <button className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>Übersicht</button>
         <button className={activeTab === 'tasks' ? 'active' : ''} onClick={() => setActiveTab('tasks')}>Aufgaben <span>{openTaskCount}</span></button>
         <button className={activeTab === 'team' ? 'active' : ''} onClick={() => setActiveTab('team')}>Team</button>
+        <button className={activeTab === 'infrastructure' ? 'active' : ''} onClick={() => setActiveTab('infrastructure')}>Infrastruktur</button>
         <button className={activeTab === 'schedule' ? 'active' : ''} onClick={() => setActiveTab('schedule')}>Ablauf</button>
       </div>
 
@@ -1561,7 +1584,10 @@ function EventWorkspace({
       {activeTab === 'tasks' && (
         <section className="action-section">
           <details className="panel accordion-panel" open={event.actions.length === 0}>
-            <summary>Aktionen hinzufügen</summary>
+            <summary className="action-picker-summary">
+              <span><Plus size={17} /> Aktionen hinzufügen</span>
+              <small>Aufklappen und passende Arbeitsbereiche auswählen</small>
+            </summary>
             <p className="help-text">Aktionen sind große Arbeitsbereiche wie Aufbau, Musik oder Catering. Du aktivierst nur, was dieses Event wirklich braucht.</p>
             <div className="template-grid">
               {actionTemplates.map(({ title, category, help }) => {
@@ -1626,7 +1652,7 @@ function EventWorkspace({
 
       {activeTab === 'team' && (
         <div className="dashboard-grid">
-          <section className="panel">
+          <section className="panel span-2">
             <div className="section-head">
               <h2>Team</h2>
               <HelpHint text="Personen mit Zugriff auf dieses Event. Admins steuern alles, Helfer bearbeiten zugewiesene Aufgaben, Künstler sehen vor allem relevante Ablaufdaten." />
@@ -1647,13 +1673,21 @@ function EventWorkspace({
               </div>
             )}
           </section>
+        </div>
+      )}
 
-          <section className="panel">
+      {activeTab === 'infrastructure' && (
+        <div className="dashboard-grid">
+          <section className="panel span-2">
             <div className="section-head">
               <div>
                 <h2>Infrastruktur-Checkliste</h2>
-                <p className="help-text">Diese Haken sind unabhängig vom Team: Markiere, was für den Ort organisiert, geprüft oder genehmigt werden muss.</p>
+                <p className="help-text">Hier markierst du, was für dieses Event gebraucht wird. Die Haken sind keine erledigten Aufgaben, sondern eine Bedarfsliste: Daraus erkennst du, worum sich jemand kümmern muss.</p>
               </div>
+            </div>
+            <div className="info-strip">
+              <strong>So nutzt du die Liste:</strong>
+              <span>Alles anhaken, was benötigt wird, danach passende Aufgaben im Aufgaben-Tab anlegen oder Verantwortliche zuweisen.</span>
             </div>
             <div className="check-grid">
               {infrastructureOptions.map((item) => (
@@ -1684,7 +1718,33 @@ function EventWorkspace({
         <>
           <MobileSetupPanel event={event} />
           <section className="lower-grid">
-            <InfoPanel icon={<ClipboardList />} title="Runsheet" help="Minutengenauer Tagesplan: Aufbau, Soundcheck, Einlass, Programmpunkte und Abbau." items={event.runsheet.map((item) => `${item.time} · ${item.title} · ${item.owner}`)} emptyText="Noch kein Ablaufplan. Lege die wichtigsten Zeiten für Aufbau, Einlass, Künstler und Abbau an." />
+            <section className="panel span-2">
+              <div className="section-head">
+                <div>
+                  <h2>Runsheet</h2>
+                  <p className="help-text">Minutengenauer Tagesplan: Aufbau, Soundcheck, Einlass, Programmpunkte und Abbau. Du kannst Zeilen direkt bearbeiten, sortieren oder löschen.</p>
+                </div>
+                <ClipboardList size={18} />
+              </div>
+              {event.runsheet.length === 0 ? (
+                <EmptyState title="Noch kein Ablaufplan" text="Lege die wichtigsten Zeiten für Aufbau, Einlass, Programmpunkte und Abbau an." />
+              ) : (
+                <div className="runsheet-editor">
+                  {event.runsheet.map((item, index) => (
+                    <div className="runsheet-row" key={item.id}>
+                      <input type="time" value={item.time} onChange={(change) => updateRunItem(item.id, { time: change.target.value })} disabled={!isAdmin} />
+                      <input value={item.title} onChange={(change) => updateRunItem(item.id, { title: change.target.value })} placeholder="Programmpunkt" disabled={!isAdmin} />
+                      <input value={item.owner} onChange={(change) => updateRunItem(item.id, { owner: change.target.value })} placeholder="Verantwortlich" disabled={!isAdmin} />
+                      <div className="row-actions">
+                        <button className="icon-button" type="button" onClick={() => moveRunItem(item.id, -1)} disabled={!isAdmin || index === 0} aria-label="Nach oben"><Upload size={15} /></button>
+                        <button className="icon-button" type="button" onClick={() => moveRunItem(item.id, 1)} disabled={!isAdmin || index === event.runsheet.length - 1} aria-label="Nach unten"><Download size={15} /></button>
+                        <button className="icon-button danger" type="button" onClick={() => deleteRunItem(item.id)} disabled={!isAdmin} aria-label="Ablaufpunkt löschen"><Trash2 size={15} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
             <section className="panel">
               <div className="section-head">
                 <h2>Ablauf ergänzen</h2>
@@ -2299,7 +2359,8 @@ function ActionBoard({
                 draggable={canEdit}
                 onDragStart={(event) => event.dataTransfer.setData('text/plain', task.id)}
               >
-                <input
+                <textarea
+                  className="task-title-input"
                   value={task.title}
                   onChange={(change) =>
                     updateAction({
@@ -2307,6 +2368,8 @@ function ActionBoard({
                       tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, title: change.target.value } : entry)),
                     })
                   }
+                  rows={2}
+                  placeholder="Konkrete Aufgabe nach SMART: Was genau soll bis wann erledigt sein?"
                   disabled={!canEdit}
                 />
                 <div className="task-meta-row">
@@ -2352,7 +2415,23 @@ function ActionBoard({
                         tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, notes: change.target.value } : entry)),
                       })
                     }
-                    placeholder="Notizen, Absprachen oder Einkaufsliste..."
+                    placeholder={`SMART formulieren:
+Spezifisch: Was genau?
+Messbar: Woran erkennen wir erledigt?
+Attraktiv/akzeptiert: Wer übernimmt es?
+Realistisch: Was wird gebraucht?
+Terminiert: Bis wann?`}
+                    disabled={!canEdit}
+                  />
+                  <textarea
+                    value={task.comments[0] || ''}
+                    onChange={(change) =>
+                      updateAction({
+                        ...action,
+                        tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, comments: [change.target.value, ...entry.comments.slice(1)] } : entry)),
+                      })
+                    }
+                    placeholder="Bemerkungen: kurze Absprachen, Rückfragen oder Besonderheiten..."
                     disabled={!canEdit}
                   />
                 </details>
