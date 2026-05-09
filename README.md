@@ -6,7 +6,7 @@ Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.16` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.4.17` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
@@ -16,6 +16,7 @@ Rev. `v0.4.16` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 - Event-Templates für wiederkehrende Abläufe wie Hochzeit, Tanzevent oder Vereinsfest, inklusive JSON-Import und JSON-Export im Adminbereich
 - eigene Infrastruktur-Ansicht, editierbares Runsheet und SMART-orientierte Aufgabenfelder mit Bemerkungen
 - Aktionskarten mit Kanban-Unteraufgaben, Status, Verantwortlichen, Deadline und Datei-Merkliste
+- klare Aufgaben-Akkordeons, bei denen immer nur ein Arbeitsbereich geöffnet ist
 - Teamverwaltung per E-Mail
 - hübsche HTML-Einladungsmails mit Eventinfos
 - Budget-Übersicht für Einnahmen und Ausgaben
@@ -36,6 +37,7 @@ Rev. `v0.4.16` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 - manueller und automatischer Erinnerungslauf für fällige Aufgaben
 - SMTP-Passwort wird verschlüsselt gespeichert
 - PostgreSQL-Migrationen, Upload-Endpunkt und Backup-Script
+- Upload-Validierung gegen ausführbare Dateien wie `.exe`, `.msi`, `.bat`, `.cmd`, `.ps1` oder `.sh`
 - Restore-Anleitung für PostgreSQL-Backups
 - Echte App-Routen für Dashboard, Admin, Eventdetails und Rechtsseiten
 - Validierte Formulare mit `react-hook-form` und `zod`

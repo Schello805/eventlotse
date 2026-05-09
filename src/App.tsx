@@ -12,6 +12,7 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  ChevronDown,
   CircleHelp,
   ClipboardList,
   Clock3,
@@ -329,9 +330,33 @@ type SettingsFormInput = z.input<typeof settingsSchema>
 type UserFormInput = z.input<typeof userFormSchema>
 
 const uid = () => crypto.randomUUID()
+const blockedUploadExtensions = new Set([
+  '.app',
+  '.bat',
+  '.cmd',
+  '.com',
+  '.dll',
+  '.dmg',
+  '.exe',
+  '.jar',
+  '.js',
+  '.jse',
+  '.msi',
+  '.ps1',
+  '.scr',
+  '.sh',
+  '.vb',
+  '.vbs',
+  '.wsf',
+])
 
 const emptyEvents: EventPlan[] = []
 const legacyDemoEventNames = new Set(['Sommerfest am See', 'Hofkonzert', 'Geburtstag 40'])
+
+function isBlockedUploadFile(fileName: string) {
+  const extension = fileName.toLowerCase().slice(fileName.lastIndexOf('.'))
+  return blockedUploadExtensions.has(extension)
+}
 
 function normalizeRole(role: string): Role {
   if (role === 'Admin' || role === 'Helfer' || role === 'Künstler') return role
@@ -1302,11 +1327,13 @@ function EventWorkspace({
   const [runDraft, setRunDraft] = useState({ time: '', title: '', owner: '' })
   const [wikiDraft, setWikiDraft] = useState('')
   const [activeTab, setActiveTab] = useState<EventTab>('overview')
+  const [openActionId, setOpenActionId] = useState('')
   const [taskFilter, setTaskFilter] = useState<TaskFilter>('all')
   const [files, setFiles] = useState<StoredFile[]>([])
   const isAdmin = session.role === 'Admin'
   const currentMember = event.members.find((member) => member.email === session.email)
   const openTaskCount = event.actions.flatMap((action) => action.tasks).filter((task) => task.status !== 'done').length
+  const activeActionId = event.actions.some((action) => action.id === openActionId) ? openActionId : event.actions[0]?.id || ''
 
   const totals = useMemo(() => {
     return event.budget.reduce(
@@ -1327,32 +1354,31 @@ function EventWorkspace({
 
   const addAction = (title: string, category: string) => {
     if (event.actions.some((action) => action.title === title)) return
-    updateEvent({
-      ...event,
-      actions: [
-        ...event.actions,
+    const nextAction: ActionCard = {
+      id: uid(),
+      title,
+      category,
+      owners: currentMember ? [currentMember.id] : [],
+      deadline: event.date,
+      notes: '',
+      tasks: [
         {
           id: uid(),
-          title,
-          category,
-          owners: currentMember ? [currentMember.id] : [],
-          deadline: event.date,
+          title: `${title} planen`,
+          ownerIds: currentMember ? [currentMember.id] : [],
+          due: event.date,
+          status: 'todo',
           notes: '',
-          tasks: [
-            {
-              id: uid(),
-              title: `${title} planen`,
-              ownerIds: currentMember ? [currentMember.id] : [],
-              due: event.date,
-              status: 'todo',
-              notes: '',
-              files: [],
-              comments: ['Karte angelegt. Verantwortliche und Details ergänzen.'],
-            },
-          ],
+          files: [],
+          comments: ['Karte angelegt. Verantwortliche und Details ergänzen.'],
         },
       ],
+    }
+    updateEvent({
+      ...event,
+      actions: [...event.actions, nextAction],
     })
+    setOpenActionId(nextAction.id)
     notify(`Aktion "${title}" wurde hinzugefügt.`)
   }
 
@@ -1624,24 +1650,37 @@ function EventWorkspace({
                   </button>
                 ))}
               </div>
-              <div className="action-grid">
+              <div className="action-stack">
                 {event.actions.map((action) => (
-                  <ActionBoard
-                    key={action.id}
-                    eventId={event.id}
-                    action={action}
-                    members={event.members}
-                    currentMemberId={currentMember?.id || ''}
-                    taskFilter={taskFilter}
-                    canEdit={isAdmin || action.owners.some((owner) => owner === currentMember?.id)}
-                    notify={notify}
-                    updateAction={(next) =>
-                      updateEvent({
-                        ...event,
-                        actions: event.actions.map((entry) => (entry.id === action.id ? next : entry)),
-                      })
-                    }
-                  />
+                  <section className={activeActionId === action.id ? 'action-accordion open' : 'action-accordion'} key={action.id}>
+                    <button className="action-accordion-head" type="button" onClick={() => setOpenActionId(action.id)} aria-expanded={activeActionId === action.id}>
+                      <span>
+                        <strong>{action.title}</strong>
+                        <small>{action.category}</small>
+                      </span>
+                      <span className="action-accordion-meta">
+                        {action.tasks.filter((task) => task.status !== 'done').length} offen · {action.tasks.length} gesamt
+                        <ChevronDown size={18} />
+                      </span>
+                    </button>
+                    {activeActionId === action.id && (
+                      <ActionBoard
+                        eventId={event.id}
+                        action={action}
+                        members={event.members}
+                        currentMemberId={currentMember?.id || ''}
+                        taskFilter={taskFilter}
+                        canEdit={isAdmin || action.owners.some((owner) => owner === currentMember?.id)}
+                        notify={notify}
+                        updateAction={(next) =>
+                          updateEvent({
+                            ...event,
+                            actions: event.actions.map((entry) => (entry.id === action.id ? next : entry)),
+                          })
+                        }
+                      />
+                    )}
+                  </section>
                 ))}
               </div>
             </>
@@ -2327,8 +2366,8 @@ function ActionBoard({
     <article className="action-card">
       <div className="section-head">
         <div>
-          <span className="eyebrow"><KanbanSquare size={14} /> {action.category}</span>
-          <h3>{action.title}</h3>
+          <span className="eyebrow"><KanbanSquare size={14} /> Kanban</span>
+          <h3>Unteraufgaben</h3>
         </div>
         <button className="icon-button" onClick={addTask} disabled={!canEdit} aria-label="Unteraufgabe hinzufügen"><Plus size={18} /></button>
       </div>
@@ -2445,18 +2484,33 @@ Terminiert: Bis wann?`}
                   <span>{task.files.length ? task.files.join(', ') : 'Datei merken'}</span>
                   <input
                     type="file"
-                    onChange={(change) => {
+                    onChange={async (change) => {
                       const file = change.target.files?.[0]
                       if (!file) return
+                      if (isBlockedUploadFile(file.name)) {
+                        notify('Diese Dateiart ist aus Sicherheitsgründen gesperrt. Bitte keine ausführbaren Dateien hochladen.')
+                        change.target.value = ''
+                        return
+                      }
                       const formData = new FormData()
                       formData.append('file', file)
                       formData.append('eventId', eventId)
                       formData.append('taskId', task.id)
-                      fetch('/api/uploads', {
-                        method: 'POST',
-                        credentials: 'include',
-                        body: formData,
-                      }).catch(() => undefined)
+                      try {
+                        const response = await fetch('/api/uploads', {
+                          method: 'POST',
+                          credentials: 'include',
+                          body: formData,
+                        })
+                        if (!response.ok) {
+                          const error = await response.json().catch(() => null)
+                          notify(error?.message || 'Datei konnte nicht hochgeladen werden.')
+                          return
+                        }
+                      } catch {
+                        notify('Datei konnte nicht hochgeladen werden.')
+                        return
+                      }
                       updateAction({
                         ...action,
                         tasks: action.tasks.map((entry) =>

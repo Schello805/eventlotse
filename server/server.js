@@ -22,6 +22,25 @@ const app = express()
 const distDir = path.join(config.rootDir, 'dist')
 const packageJson = JSON.parse(fs.readFileSync(path.join(config.rootDir, 'package.json'), 'utf8'))
 const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 12, standardHeaders: true, legacyHeaders: false })
+const blockedUploadExtensions = new Set([
+  '.app',
+  '.bat',
+  '.cmd',
+  '.com',
+  '.dll',
+  '.dmg',
+  '.exe',
+  '.jar',
+  '.js',
+  '.jse',
+  '.msi',
+  '.ps1',
+  '.scr',
+  '.sh',
+  '.vb',
+  '.vbs',
+  '.wsf',
+])
 const upload = multer({
   dest: config.uploadDir,
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -147,6 +166,14 @@ function eventFromRow(row) {
 
 function sanitizeFilename(name) {
   return String(name || 'datei').replace(/[\r\n"\\/]/g, '_')
+}
+
+function isBlockedUpload(file = {}) {
+  return blockedUploadExtensions.has(path.extname(file.originalname || '').toLowerCase())
+}
+
+function cleanupUploadedFile(file = {}) {
+  if (file.filename) fs.rm(path.join(config.uploadDir, file.filename), { force: true }, () => undefined)
 }
 
 function escapeIcs(value) {
@@ -488,10 +515,16 @@ app.delete('/api/files/:fileId', requireAuth, async (request, response) => {
 
 app.post('/api/uploads', requireAuth, upload.single('file'), async (request, response) => {
   const { eventId, taskId } = request.body
+  const file = request.file
+  if (!file) return response.status(400).json({ message: 'Keine Datei empfangen.' })
+  if (isBlockedUpload(file)) {
+    cleanupUploadedFile(file)
+    return response.status(400).json({ message: 'Diese Dateiart ist aus Sicherheitsgründen gesperrt.' })
+  }
   if (!(await canWriteEvent(request.user, eventId))) {
+    cleanupUploadedFile(file)
     return response.status(403).json({ message: 'Du darfst für dieses Event keine Dateien hochladen.' })
   }
-  const file = request.file
   const result = await query(
     `INSERT INTO files (event_id, task_id, original_name, stored_name, mime_type, size_bytes, uploaded_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
