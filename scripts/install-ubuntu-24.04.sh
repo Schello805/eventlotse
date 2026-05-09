@@ -23,6 +23,15 @@ log() {
   printf '\n[Eventlotse] %s\n' "$1"
 }
 
+quote_env_value() {
+  local value="${1:-}"
+  printf "'%s'" "${value//\'/\'\\\'\'}"
+}
+
+write_env_line() {
+  printf '%s=%s\n' "$1" "$(quote_env_value "${2:-}")"
+}
+
 require_root() {
   if [ "$(id -u)" -ne 0 ]; then
     echo "Bitte als root ausführen, z.B. mit sudo." >&2
@@ -94,25 +103,25 @@ setup_postgres() {
 write_env_file() {
   log "Schreibe Umgebungskonfiguration nach ${ENV_FILE}."
   install -d -m 0750 "$ENV_DIR"
-  cat > "$ENV_FILE" <<ENV
-NODE_ENV=production
-PORT=${APP_PORT}
-HOST=127.0.0.1
-PUBLIC_BASE_URL=http://${SERVER_NAME}
-DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@localhost:5432/${DB_NAME}
-JWT_SECRET=${JWT_SECRET}
-COOKIE_SECURE=false
-UPLOAD_DIR=/var/lib/eventlotse/uploads
-ADMIN_EMAIL=${ADMIN_EMAIL}
-ADMIN_PASSWORD=${ADMIN_PASSWORD}
-REMINDER_HOUR=${REMINDER_HOUR}
-SMTP_HOST=${SMTP_HOST:-}
-SMTP_PORT=${SMTP_PORT:-587}
-SMTP_USER=${SMTP_USER:-}
-SMTP_PASS=${SMTP_PASS:-}
-SMTP_FROM=${SMTP_FROM:-Eventlotse <${ADMIN_EMAIL}>}
-SMTP_SECURE=${SMTP_SECURE:-false}
-ENV
+  {
+    write_env_line NODE_ENV production
+    write_env_line PORT "$APP_PORT"
+    write_env_line HOST 127.0.0.1
+    write_env_line PUBLIC_BASE_URL "http://${SERVER_NAME}"
+    write_env_line DATABASE_URL "postgres://${DB_USER}:${DB_PASSWORD}@localhost:5432/${DB_NAME}"
+    write_env_line JWT_SECRET "$JWT_SECRET"
+    write_env_line COOKIE_SECURE false
+    write_env_line UPLOAD_DIR /var/lib/eventlotse/uploads
+    write_env_line ADMIN_EMAIL "$ADMIN_EMAIL"
+    write_env_line ADMIN_PASSWORD "$ADMIN_PASSWORD"
+    write_env_line REMINDER_HOUR "$REMINDER_HOUR"
+    write_env_line SMTP_HOST "${SMTP_HOST:-}"
+    write_env_line SMTP_PORT "${SMTP_PORT:-587}"
+    write_env_line SMTP_USER "${SMTP_USER:-}"
+    write_env_line SMTP_PASS "${SMTP_PASS:-}"
+    write_env_line SMTP_FROM "${SMTP_FROM:-Eventlotse <${ADMIN_EMAIL}>}"
+    write_env_line SMTP_SECURE "${SMTP_SECURE:-false}"
+  } > "$ENV_FILE"
   chmod 0640 "$ENV_FILE"
   chown root:www-data "$ENV_FILE"
   install -d -m 0750 -o www-data -g www-data /var/lib/eventlotse/uploads
