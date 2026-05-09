@@ -59,16 +59,33 @@ app.use(express.json({ limit: '2mb' }))
 app.use(cookieParser())
 app.use(rateLimit({ windowMs: 60_000, limit: 240 }))
 
+function parseUrl(value) {
+  try {
+    return new URL(value)
+  } catch {
+    return null
+  }
+}
+
+function isAllowedOrigin(request, origin) {
+  const originUrl = parseUrl(origin)
+  if (!originUrl) return false
+
+  const requestHost = String(request.get('host') || '').toLowerCase()
+  const publicUrl = parseUrl(config.publicBaseUrl)
+  const publicOrigin = publicUrl?.origin.toLowerCase()
+  const publicHost = publicUrl?.host.toLowerCase()
+  const originHost = originUrl.host.toLowerCase()
+
+  return origin.toLowerCase() === publicOrigin || originHost === requestHost || originHost === publicHost
+}
+
 app.use((request, response, next) => {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) return next()
   const origin = request.header('origin')
   if (!origin) return next()
 
-  const allowedOrigins = new Set([
-    `${request.protocol}://${request.get('host')}`,
-    new URL(config.publicBaseUrl).origin,
-  ])
-  if (!allowedOrigins.has(origin)) {
+  if (!isAllowedOrigin(request, origin)) {
     if (request.path === '/api/auth/login') {
       return response.status(403).json({ message: 'Anmeldung nicht möglich. Bitte E-Mail und Passwort prüfen oder die Seite neu laden.' })
     }

@@ -6,7 +6,7 @@ Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.19` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.4.20` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
@@ -31,6 +31,7 @@ Rev. `v0.4.19` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 - Adminbereich nur nach Admin-Login sichtbar
 - optionale Admin-Einstellung, ob alle angemeldeten Nutzer oder nur Admins neue Events erstellen dürfen
 - eigenes Admin-Passwort direkt in der Adminseite ändern
+- Wartungsscript zum Zurücksetzen des Admin-Passworts, falls der Login nicht mehr möglich ist
 - sichere Einladungslinks mit Passwort setzen
 - Dateiliste mit Download und Löschen pro Event
 - iCal-Export, CSV-/XLSX-Aufgabenexport und PDF-Ablaufplan
@@ -152,6 +153,17 @@ sudo SERVER_NAME=eventlotse.schellenberger.biz ./scripts/update-ubuntu-24.04.sh
 
 ```bash
 sudo /opt/eventlotse/scripts/backup-postgres.sh
+```
+
+### Admin-Passwort zurücksetzen
+
+Das Passwort in `/etc/eventlotse/eventlotse.env` ist nur das initiale Installationspasswort. Sobald du das Passwort in Eventlotse änderst, liegt das aktuelle Passwort als Hash in PostgreSQL und die `.env` wird nicht mehr geändert.
+
+Falls du dich aussperrst, kannst du auf dem Server ein neues Admin-Passwort setzen:
+
+```bash
+sudo /opt/eventlotse/scripts/reset-admin-password.sh info@schellenberger.biz 'NeuesSicheresPasswort123!'
+sudo systemctl restart eventlotse
 ```
 
 ### HTTPS aktivieren
