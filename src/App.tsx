@@ -1964,6 +1964,11 @@ function EmptyState({ title, text }: { title: string; text: string }) {
 }
 
 function Toast({ toast, onClose }: { toast: NonNullable<ToastState>; onClose: () => void }) {
+  useEffect(() => {
+    const timeout = window.setTimeout(onClose, toast.actionLabel ? 8000 : 5000)
+    return () => window.clearTimeout(timeout)
+  }, [onClose, toast.actionLabel, toast.message])
+
   return (
     <div className="toast">
       <span>{toast.message}</span>

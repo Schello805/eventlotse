@@ -259,8 +259,22 @@ textarea {
 }
 
 .task-card textarea {
-  min-height: 72px;
-  font-size: 13px;
+  min-height: 96px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.task-card input,
+.task-card select,
+.task-card textarea {
+  min-height: 40px;
+  padding: 9px 10px;
+}
+
+.task-card input:first-child {
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 750;
 }
 
 .workspace {
