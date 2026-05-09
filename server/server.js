@@ -38,6 +38,21 @@ app.use(express.json({ limit: '2mb' }))
 app.use(cookieParser())
 app.use(rateLimit({ windowMs: 60_000, limit: 240 }))
 
+app.use((request, response, next) => {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) return next()
+  const origin = request.header('origin')
+  if (!origin) return next()
+
+  const allowedOrigins = new Set([
+    `${request.protocol}://${request.get('host')}`,
+    new URL(config.publicBaseUrl).origin,
+  ])
+  if (!allowedOrigins.has(origin)) {
+    return response.status(403).json({ message: 'Anfrage von dieser Herkunft ist nicht erlaubt.' })
+  }
+  next()
+})
+
 function signToken(user) {
   return jwt.sign({ sub: user.id, email: user.email, role: user.role }, config.jwtSecret, { expiresIn: '7d' })
 }

@@ -3,6 +3,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const publicBaseUrl = process.env.PUBLIC_BASE_URL || 'http://localhost:3000'
+const cookieSecure = process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : publicBaseUrl.startsWith('https://')
 
 export const config = {
   rootDir,
@@ -11,9 +13,9 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   databaseUrl: process.env.DATABASE_URL || 'postgres://eventlotse:eventlotse@localhost:5432/eventlotse',
   jwtSecret: process.env.JWT_SECRET || 'eventlotse-dev-secret-change-me',
-  cookieSecure: process.env.COOKIE_SECURE === 'true',
+  cookieSecure,
   uploadDir: process.env.UPLOAD_DIR || path.join(rootDir, 'uploads'),
-  publicBaseUrl: process.env.PUBLIC_BASE_URL || 'http://localhost:3000',
+  publicBaseUrl,
   adminEmail: process.env.ADMIN_EMAIL || 'admin@example.de',
   adminPassword: process.env.ADMIN_PASSWORD || 'Eventlotse-Start123!',
   reminderHour: Number(process.env.REMINDER_HOUR || 8),

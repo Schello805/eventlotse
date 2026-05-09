@@ -387,6 +387,10 @@ function App() {
   }
 
   const addEvent = (data: EventFormValues) => {
+    if (!session.authenticated) {
+      notify('Bitte melde dich an, bevor du ein Event anlegst.')
+      throw new Error('Login erforderlich.')
+    }
     const next: EventPlan = {
       id: uid(),
       name: data.name,
@@ -446,7 +450,7 @@ function App() {
           <Link to="/"><LayoutDashboard size={15} /> Dashboard</Link>
           {session.authenticated && session.role === 'Admin' && <Link to="/admin"><Settings size={15} /> Admin</Link>}
         </nav>
-        <GlobalSearch events={events} />
+        <GlobalSearch events={session.authenticated ? events : []} />
         <AuthControl
           session={session}
           password={loginPassword}
@@ -459,7 +463,7 @@ function App() {
 
       <main className="workspace dashboard-mode">
         <Routes>
-          <Route path="/" element={<Dashboard events={events} addEvent={addEvent} notify={notify} />} />
+          <Route path="/" element={<Dashboard events={events} session={session} addEvent={addEvent} notify={notify} />} />
           <Route
             path="/admin"
             element={
@@ -499,10 +503,12 @@ function App() {
 
 function Dashboard({
   events,
+  session,
   addEvent,
   notify,
 }: {
   events: EventPlan[]
+  session: { email: string; role: Role; authenticated: boolean }
   addEvent: (data: EventFormValues) => EventPlan
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
@@ -537,6 +543,10 @@ function Dashboard({
     const event = addEvent(data)
     eventForm.reset()
     notify(`Event "${event.name}" ist bereit. Ergänze jetzt Aufgaben oder Team.`, 'Event öffnen', () => navigate(`/events/${event.id}`))
+  }
+
+  if (!session.authenticated) {
+    return <LoginRequired />
   }
 
   return (
@@ -719,6 +729,19 @@ function AdminLocked() {
   )
 }
 
+function LoginRequired() {
+  return (
+    <section className="panel login-required">
+      <div className="section-head">
+        <h2>Login erforderlich</h2>
+        <Lock size={18} />
+      </div>
+      <p>Eventlotse zeigt Veranstaltungen und Arbeitsdaten erst nach erfolgreicher Anmeldung.</p>
+      <p className="help-text">Melde dich oben rechts an. Danach kannst du Events anlegen, öffnen und bearbeiten.</p>
+    </section>
+  )
+}
+
 function InvitePage({ notify }: { notify: (message: string, actionLabel?: string, onAction?: () => void) => void }) {
   const { token } = useParams()
   const navigate = useNavigate()
@@ -838,12 +861,15 @@ function EventRoute({
   notify,
 }: {
   events: EventPlan[]
-  session: { email: string; role: Role }
+  session: { email: string; role: Role; authenticated: boolean }
   saveState: SaveState
   updateEvent: (event: EventPlan) => void
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
   const { eventId } = useParams()
+  if (!session.authenticated) {
+    return <LoginRequired />
+  }
   const event = events.find((entry) => entry.id === eventId)
 
   if (!event) {
