@@ -1314,6 +1314,17 @@ form {
   color: #627084;
 }
 
+.task-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.task-card-actions .ghost {
+  flex: 1 1 110px;
+  justify-content: center;
+}
+
 .info-strip {
   margin: 0 0 12px;
   padding: 10px 12px;
@@ -1825,20 +1836,34 @@ form {
 @media (max-width: 760px) {
   .topbar {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr;
     gap: 8px;
     align-items: start;
   }
 
   .brand {
-    grid-column: 1;
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  .brand small {
+    display: none;
   }
 
   .auth-menu,
   .auth-status {
-    grid-column: 2;
-    grid-row: 1;
-    justify-self: end;
+    grid-column: 1 / -1;
+    grid-row: auto;
+    justify-self: stretch;
+    justify-content: space-between;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .auth-status strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .app-nav,
@@ -1876,6 +1901,12 @@ form {
   .event-hero {
     align-items: stretch;
     flex-direction: column;
+    min-height: auto;
+    padding: 16px;
+  }
+
+  .event-hero h1 {
+    font-size: 30px;
   }
 
   .workspace {
@@ -1896,8 +1927,47 @@ form {
     grid-template-columns: 1fr;
   }
 
+  .hero-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .stat {
+    min-width: 0;
+    padding: 9px;
+  }
+
+  .stat strong {
+    font-size: 15px;
+    overflow-wrap: anywhere;
+  }
+
   .event-tabs {
     overflow-x: auto;
+  }
+
+  .event-admin-actions {
+    justify-content: stretch;
+  }
+
+  .event-admin-actions .ghost {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .task-card,
+  .lane {
+    min-width: 0;
+  }
+
+  .task-card input,
+  .task-card select,
+  .task-card textarea {
+    font-size: 16px;
+  }
+
+  .task-details {
+    overflow: hidden;
   }
 
   .home-hero {
@@ -1917,6 +1987,55 @@ form {
 
   .auth-menu-panel {
     right: 0;
+  }
+}
+
+@media print {
+  .topbar,
+  .footer,
+  .back-button,
+  .event-tabs,
+  .event-admin-actions,
+  .guidance-panel,
+  .mobile-setup,
+  .action-section,
+  .button-row,
+  .quick-entry,
+  .row-actions {
+    display: none !important;
+  }
+
+  body,
+  .app-shell,
+  .workspace {
+    background: white !important;
+  }
+
+  .workspace,
+  .event-workspace {
+    padding: 0 !important;
+  }
+
+  .event-hero {
+    min-height: auto;
+    padding: 16px;
+    color: #172033;
+    background: white;
+    border: 1px solid #dce2ea;
+  }
+
+  .hero-stats {
+    color: #172033;
+  }
+
+  .stat {
+    border-color: #dce2ea;
+    background: white;
+  }
+
+  .panel {
+    box-shadow: none !important;
+    break-inside: avoid;
   }
 }
 

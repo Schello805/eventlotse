@@ -18,6 +18,7 @@ import {
   CircleHelp,
   ClipboardList,
   Clock3,
+  Copy,
   Download,
   Euro,
   FileText,
@@ -315,6 +316,14 @@ type EventFormInput = z.input<typeof eventFormSchema>
 type SettingsFormInput = z.input<typeof settingsSchema>
 
 const uid = () => crypto.randomUUID()
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'event'
+
 const blockedUploadExtensions = new Set([
   '.app',
   '.bat',
@@ -641,7 +650,18 @@ function App() {
           />
           <Route
             path="/events/:eventId"
-            element={<EventRoute events={events} session={session} saveState={saveState} updateEvent={updateEvent} deleteEvent={deleteEvent} notify={notify} />}
+            element={
+              <EventRoute
+                events={events}
+                templates={eventTemplates}
+                setTemplates={setEventTemplates}
+                session={session}
+                saveState={saveState}
+                updateEvent={updateEvent}
+                deleteEvent={deleteEvent}
+                notify={notify}
+              />
+            }
           />
           <Route path="/profil" element={session.authenticated ? <ProfilePage session={session} setSession={setSession} notify={notify} /> : <LoginRequired />} />
           <Route path="/impressum" element={<LegalPage page="impressum" />} />
@@ -1158,6 +1178,8 @@ function GlobalSearch({ events }: { events: EventPlan[] }) {
 
 function EventRoute({
   events,
+  templates,
+  setTemplates,
   session,
   saveState,
   updateEvent,
@@ -1165,6 +1187,8 @@ function EventRoute({
   notify,
 }: {
   events: EventPlan[]
+  templates: EventTemplate[]
+  setTemplates: (templates: EventTemplate[]) => void
   session: { email: string; role: Role; authenticated: boolean }
   saveState: SaveState
   updateEvent: (event: EventPlan) => void
@@ -1181,7 +1205,18 @@ function EventRoute({
     return <Navigate to="/" replace />
   }
 
-  return <EventWorkspace event={event} session={session} saveState={saveState} updateEvent={updateEvent} deleteEvent={deleteEvent} notify={notify} />
+  return (
+    <EventWorkspace
+      event={event}
+      templates={templates}
+      setTemplates={setTemplates}
+      session={session}
+      saveState={saveState}
+      updateEvent={updateEvent}
+      deleteEvent={deleteEvent}
+      notify={notify}
+    />
+  )
 }
 
 function MobileSetupPanel({ event }: { event: EventPlan }) {
@@ -1282,6 +1317,8 @@ function NextSteps({
 
 function EventWorkspace({
   event,
+  templates,
+  setTemplates,
   session,
   saveState,
   updateEvent,
@@ -1289,6 +1326,8 @@ function EventWorkspace({
   notify,
 }: {
   event: EventPlan
+  templates: EventTemplate[]
+  setTemplates: (templates: EventTemplate[]) => void
   session: { email: string; role: Role }
   saveState: SaveState
   updateEvent: (event: EventPlan) => void
@@ -1419,6 +1458,49 @@ function EventWorkspace({
     notify('Export wurde erstellt.')
   }
 
+  const saveEventAsTemplate = async () => {
+    if (!isAdmin) {
+      notify('Nur Admins können Event-Vorlagen speichern.')
+      return
+    }
+    const template: EventTemplate = {
+      id: `template-${slugify(event.name)}-${Date.now()}`,
+      name: `${event.name} Vorlage`,
+      description: `Aus dem Event "${event.name}" gespeichert.`,
+      motto: event.motto,
+      targetGroup: event.targetGroup,
+      guests: event.guests,
+      actions: event.actions.map((action) => ({
+        title: action.title,
+        category: action.category,
+        tasks: action.tasks.map((task) => task.title).filter(Boolean),
+      })),
+      infrastructure: event.infrastructure,
+      runsheet: event.runsheet.map((item) => ({ time: item.time, title: item.title, owner: item.owner })),
+      budget: event.budget.map((line) => ({ label: line.label, type: line.type, amount: line.amount })),
+      wiki: event.wiki,
+    }
+    const nextTemplates = [template, ...templates.filter((entry) => entry.id !== template.id)]
+    try {
+      const response = await fetch('/api/admin/templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ templates: nextTemplates }),
+      })
+      if (!response.ok) {
+        const error = await response.json().catch(() => null)
+        throw new Error(error?.message || 'Vorlage konnte nicht gespeichert werden.')
+      }
+      const data = await response.json()
+      setTemplates(normalizeTemplates(data.templates || nextTemplates))
+      notify('Event wurde als Vorlage gespeichert.')
+    } catch (error) {
+      setTemplates(nextTemplates)
+      notify(error instanceof Error ? error.message : 'Vorlage wurde lokal gespeichert.')
+    }
+  }
+
   const deleteFile = async (fileId: string) => {
     const response = await fetch(`/api/files/${fileId}`, { method: 'DELETE', credentials: 'include' })
     if (!response.ok) {
@@ -1546,6 +1628,7 @@ function EventWorkspace({
                 <a className="ghost" href={`/api/events/${event.id}/export/tasks.xlsx`}><Download size={16} /> XLSX</a>
                 <a className="ghost" href={`/api/events/${event.id}/export/runsheet.pdf`}><FileText size={16} /> Zeitplan-PDF</a>
                 <button className="ghost" onClick={exportJson}><Download size={16} /> JSON</button>
+                {isAdmin && <button className="ghost" type="button" onClick={saveEventAsTemplate}><Save size={16} /> Als Vorlage speichern</button>}
               </div>
             </div>
             <div className="profile-grid">
@@ -2235,6 +2318,32 @@ function ActionBoard({
     })
   }
 
+  const duplicateTask = (task: Task) => {
+    updateAction({
+      ...action,
+      tasks: [
+        ...action.tasks,
+        {
+          ...task,
+          id: uid(),
+          title: `${task.title} Kopie`,
+          files: [],
+          comments: task.comments.length ? [...task.comments] : [],
+        },
+      ],
+    })
+    notify('Aufgabe wurde kopiert.')
+  }
+
+  const deleteTask = (task: Task) => {
+    if (!window.confirm(`Aufgabe "${task.title}" wirklich löschen?`)) return
+    updateAction({
+      ...action,
+      tasks: action.tasks.filter((entry) => entry.id !== task.id),
+    })
+    notify('Aufgabe wurde gelöscht.')
+  }
+
   return (
     <article className="action-card">
       <div className="section-head">
@@ -2352,6 +2461,16 @@ Terminiert: Bis wann?`}
                     <span className="avatar" title={member.email} key={member.id}>{member.name.slice(0, 2).toUpperCase()}</span>
                   ))}
                 </div>
+                {canEdit && (
+                  <div className="task-card-actions">
+                    <button className="ghost" type="button" onClick={() => duplicateTask(task)}>
+                      <Copy size={15} /> Kopieren
+                    </button>
+                    <button className="ghost danger" type="button" onClick={() => deleteTask(task)}>
+                      <Trash2 size={15} /> Löschen
+                    </button>
+                  </div>
+                )}
                 <label className="file-drop">
                   <Upload size={15} />
                   <span>{task.files.length ? task.files.join(', ') : 'Datei merken'}</span>

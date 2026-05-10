@@ -24,7 +24,7 @@
 ## Rev. 0.3
 
 - Datei-Uploads
-- PDF-Export für Runsheet
+- PDF-Export für Zeitplan
 - Excel-Export für Einkaufs- und Aufgabenlisten
 - iCal-Feed pro Event
 

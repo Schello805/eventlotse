@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   name text NOT NULL DEFAULT '',
   profile_note text NOT NULL DEFAULT '',
   password_hash text NOT NULL,
-  role text NOT NULL CHECK (role IN ('Admin', 'Helfer', 'Künstler')),
+  role text NOT NULL CHECK (role IN ('Admin', 'Helfer')),
   active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE TABLE IF NOT EXISTS event_members (
   event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role text NOT NULL CHECK (role IN ('Admin', 'Helfer', 'Künstler')),
+  role text NOT NULL CHECK (role IN ('Admin', 'Helfer')),
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (event_id, user_id)
 );

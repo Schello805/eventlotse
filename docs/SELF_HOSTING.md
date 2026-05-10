@@ -90,7 +90,7 @@ Wenn du komplett auf einen neuen Server umziehst, zuerst Installation ausführen
 - Backend-API mit Node.js und Express
 - PostgreSQL-Schema mit Migration
 - Authentifizierung mit HttpOnly-Cookie
-- Rollenmodell: Admin, Helfer, Künstler
+- Rollenmodell: Admin und Helfer
 - Event-spezifische Mitgliederrechte
 - Admin-Konfiguration für SMTP inklusive Passwort/App-Passwort, Base URL, Benutzerverwaltung und Auditlog
 - Dateiablage für Flyer, Rechnungen, Tech-Rider und Pläne

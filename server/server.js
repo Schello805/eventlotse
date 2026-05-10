@@ -336,8 +336,25 @@ app.post('/api/auth/profile', requireAuth, async (request, response) => {
      RETURNING id, email, name, profile_note, role, active, last_login_at`,
     [name, profileNote, request.user.id],
   )
+  const updatedUser = result.rows[0]
+  const eventRows = await query(
+    `SELECT e.id, e.data
+     FROM events e
+     JOIN event_members em ON em.event_id = e.id
+     WHERE em.user_id = $1`,
+    [request.user.id],
+  )
+  for (const row of eventRows.rows) {
+    const event = eventFromRow(row)
+    const members = (event.members || []).map((member) =>
+      member.id === request.user.id || member.email === request.user.email
+        ? { ...member, name: updatedUser.name, email: updatedUser.email, note: updatedUser.profile_note || '' }
+        : member,
+    )
+    await query('UPDATE events SET data = $1, updated_at = now() WHERE id = $2', [JSON.stringify({ ...event, members }), row.id])
+  }
   await audit(request.user, 'Profil wurde aktualisiert.')
-  response.json({ user: publicUser(result.rows[0]) })
+  response.json({ user: publicUser(updatedUser) })
 })
 
 app.get('/api/invites/:token', async (request, response) => {
@@ -491,12 +508,16 @@ app.post('/api/events/:eventId/members', requireAuth, async (request, response) 
   if (!eventResult.rowCount) return response.status(404).json({ message: 'Event nicht gefunden.' })
   const event = eventFromRow(eventResult.rows[0])
 
+  const normalizedNote = String(note || '').trim()
   const userResult = await query(
-    `INSERT INTO users (email, name, password_hash, role, active)
-     VALUES ($1, $2, $3, $4, true)
-     ON CONFLICT (email) DO UPDATE SET name = COALESCE(NULLIF(EXCLUDED.name, ''), users.name), active = true
+    `INSERT INTO users (email, name, profile_note, password_hash, role, active)
+     VALUES ($1, $2, $3, $4, $5, true)
+     ON CONFLICT (email) DO UPDATE SET
+       name = COALESCE(NULLIF(EXCLUDED.name, ''), users.name),
+       profile_note = COALESCE(NULLIF(EXCLUDED.profile_note, ''), users.profile_note),
+       active = true
      RETURNING id, email, name, profile_note, role, active, last_login_at`,
-    [normalizedEmail, name || normalizedEmail.split('@')[0], passwordHash, role],
+    [normalizedEmail, name || normalizedEmail.split('@')[0], normalizedNote, passwordHash, role],
   )
   const user = userResult.rows[0]
   await query(
@@ -512,7 +533,7 @@ app.post('/api/events/:eventId/members', requireAuth, async (request, response) 
     ...event,
     members: [
       ...event.members.filter((member) => member.email !== normalizedEmail),
-      { id: user.id, name: user.name, email: user.email, role: 'Helfer', note: String(note || '').trim() },
+      { id: user.id, name: user.name, email: user.email, role: 'Helfer', note: user.profile_note || normalizedNote },
     ],
   }
   await query('UPDATE events SET data = $1, updated_at = now() WHERE id = $2', [JSON.stringify(updatedEvent), request.params.eventId])
