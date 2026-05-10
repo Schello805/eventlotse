@@ -1658,14 +1658,21 @@ function EventWorkspace({
         <div className="dashboard-grid">
           <section className="panel span-2">
             <div className="section-head">
-              <h2>Event-Steckbrief</h2>
-              <HelpHint text="Der Steckbrief ist die gemeinsame Orientierung: Motto, Zielgruppe, Lageplan und Kontakt vor Ort." />
+              <div className="title-with-help">
+                <h2>Event-Steckbrief</h2>
+                <HelpHint text="Der Steckbrief ist die gemeinsame Orientierung: Motto, Zielgruppe, Lageplan und Kontakt vor Ort." />
+              </div>
               <div className="button-row">
-                <a className="ghost" href={`/api/events/${event.id}/calendar.ics`}><CalendarDays size={16} /> iCal</a>
-                <a className="ghost" href={`/api/events/${event.id}/export/tasks.csv`}><Download size={16} /> CSV</a>
-                <a className="ghost" href={`/api/events/${event.id}/export/tasks.xlsx`}><Download size={16} /> XLSX</a>
-                <a className="ghost" href={`/api/events/${event.id}/export/runsheet.pdf`}><FileText size={16} /> Zeitplan-PDF</a>
-                <button className="ghost" onClick={exportJson}><Download size={16} /> JSON</button>
+                <details className="export-menu">
+                  <summary className="ghost"><Download size={16} /> Export <ChevronDown size={15} /></summary>
+                  <div className="export-menu-panel">
+                    <a href={`/api/events/${event.id}/calendar.ics`}><CalendarDays size={16} /> Kalenderdatei iCal</a>
+                    <a href={`/api/events/${event.id}/export/tasks.csv`}><Download size={16} /> Aufgaben als CSV</a>
+                    <a href={`/api/events/${event.id}/export/tasks.xlsx`}><Download size={16} /> Aufgaben als Excel</a>
+                    <a href={`/api/events/${event.id}/export/runsheet.pdf`}><FileText size={16} /> Zeitplan als PDF</a>
+                    <button type="button" onClick={exportJson}><Download size={16} /> Event als JSON</button>
+                  </div>
+                </details>
                 {isAdmin && <button className="ghost" type="button" onClick={saveEventAsTemplate}><Save size={16} /> Als Vorlage speichern</button>}
               </div>
             </div>

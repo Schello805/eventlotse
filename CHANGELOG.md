@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.24
+
+- Hilfe-Icon im Event-Steckbrief direkt an die Überschrift gesetzt.
+- Exportvarianten im Steckbrief in ein platzsparendes Dropdown-Menü verschoben.
+
 ## v0.4.23
 
 - CSRF-Schutz für angemeldete Schreibzugriffe ergänzt.
