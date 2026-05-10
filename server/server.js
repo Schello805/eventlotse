@@ -12,35 +12,20 @@ import jwt from 'jsonwebtoken'
 import multer from 'multer'
 import path from 'node:path'
 import PDFDocument from 'pdfkit'
+import { canReadEventWithQuery, canWriteEventWithQuery } from './authz.js'
 import { config } from './config.js'
 import { encryptSecret } from './crypto-box.js'
 import { pool, query, transaction } from './db.js'
 import { createTransport, invitationMail, passwordResetMail, reminderMail, testMail } from './mail.js'
 import { mergeAppSettings, normalizeEventTemplates, sanitizeAppSettings } from './settings.js'
+import { hasExecutableSignature, isBlockedUpload } from './upload-security.js'
 
 const app = express()
 const distDir = path.join(config.rootDir, 'dist')
 const packageJson = JSON.parse(fs.readFileSync(path.join(config.rootDir, 'package.json'), 'utf8'))
 const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 12, standardHeaders: true, legacyHeaders: false })
-const blockedUploadExtensions = new Set([
-  '.app',
-  '.bat',
-  '.cmd',
-  '.com',
-  '.dll',
-  '.dmg',
-  '.exe',
-  '.jar',
-  '.js',
-  '.jse',
-  '.msi',
-  '.ps1',
-  '.scr',
-  '.sh',
-  '.vb',
-  '.vbs',
-  '.wsf',
-])
+const uploadLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 40, standardHeaders: true, legacyHeaders: false })
+const csrfCookieName = 'eventlotse_csrf'
 const upload = multer({
   dest: config.uploadDir,
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -58,6 +43,29 @@ app.use(compression())
 app.use(express.json({ limit: '2mb' }))
 app.use(cookieParser())
 app.use(rateLimit({ windowMs: 60_000, limit: 240 }))
+
+function csrfCookieOptions() {
+  return {
+    httpOnly: false,
+    path: '/',
+    sameSite: 'lax',
+    secure: config.cookieSecure,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  }
+}
+
+function createCsrfToken() {
+  return crypto.randomBytes(32).toString('base64url')
+}
+
+function setCsrfCookie(response, token = createCsrfToken()) {
+  response.cookie(csrfCookieName, token, csrfCookieOptions())
+  return token
+}
+
+function clearCsrfCookie(response) {
+  response.clearCookie(csrfCookieName, csrfCookieOptions())
+}
 
 function parseUrl(value) {
   try {
@@ -90,6 +98,27 @@ app.use((request, response, next) => {
       return response.status(403).json({ message: 'Anmeldung nicht möglich. Bitte E-Mail und Passwort prüfen oder die Seite neu laden.' })
     }
     return response.status(403).json({ message: 'Anfrage von dieser Herkunft ist nicht erlaubt.' })
+  }
+  next()
+})
+
+app.use((request, response, next) => {
+  if (!request.cookies?.[csrfCookieName] && request.cookies?.eventlotse_token && request.method === 'GET' && request.path.startsWith('/api/')) {
+    setCsrfCookie(response)
+  }
+  next()
+})
+
+app.use((request, response, next) => {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) return next()
+  if (!request.path.startsWith('/api/')) return next()
+  if (request.header('authorization')) return next()
+  if (request.path === '/api/auth/login' || request.path === '/api/auth/logout' || request.path.startsWith('/api/invites/')) return next()
+
+  const cookieToken = request.cookies?.[csrfCookieName]
+  const headerToken = request.header('x-eventlotse-csrf')
+  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+    return response.status(403).json({ message: 'Sicherheitsprüfung fehlgeschlagen. Bitte Seite neu laden und erneut versuchen.' })
   }
   next()
 })
@@ -146,19 +175,11 @@ function requireAdmin(request, response, next) {
 }
 
 async function canReadEvent(user, eventId) {
-  if (user.role === 'Admin') return true
-  const result = await query('SELECT 1 FROM event_members WHERE event_id = $1 AND user_id = $2', [eventId, user.id])
-  return Boolean(result.rowCount)
+  return canReadEventWithQuery(query, user, eventId)
 }
 
 async function canWriteEvent(user, eventId) {
-  if (user.role === 'Admin') return true
-  const result = await query(
-    `SELECT 1 FROM event_members
-     WHERE event_id = $1 AND user_id = $2 AND role IN ('Admin', 'Helfer')`,
-    [eventId, user.id],
-  )
-  return Boolean(result.rowCount)
+  return canWriteEventWithQuery(query, user, eventId)
 }
 
 function publicUser(user) {
@@ -187,10 +208,6 @@ function eventFromRow(row) {
 
 function sanitizeFilename(name) {
   return String(name || 'datei').replace(/[\r\n"\\/]/g, '_')
-}
-
-function isBlockedUpload(file = {}) {
-  return blockedUploadExtensions.has(path.extname(file.originalname || '').toLowerCase())
 }
 
 function cleanupUploadedFile(file = {}) {
@@ -290,6 +307,7 @@ app.post('/api/auth/login', authLimiter, async (request, response) => {
   await query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id])
   await audit(user, 'Benutzer hat sich angemeldet.')
   setAuthCookie(response, signToken(user))
+  setCsrfCookie(response)
   response.json({ user: publicUser(user) })
 })
 
@@ -306,6 +324,7 @@ app.post('/api/auth/logout', async (request, response) => {
     }
   }
   clearAuthCookie(response)
+  clearCsrfCookie(response)
   if (user) await audit(user, 'Benutzer hat sich abgemeldet.')
   response.json({ ok: true })
 })
@@ -401,11 +420,69 @@ app.post('/api/invites/:token/accept', async (request, response) => {
   const user = { id: invite.user_id, email: invite.email, role: invite.role }
   await audit(user, 'Einladung wurde angenommen und Passwort gesetzt.')
   setAuthCookie(response, signToken(user))
+  setCsrfCookie(response)
   response.json({ ok: true, user })
 })
 
 app.get('/api/me', requireAuth, (request, response) => {
   response.json({ user: publicUser(request.user) })
+})
+
+app.get('/api/account/export', requireAuth, async (request, response) => {
+  const eventsResult = request.user.role === 'Admin'
+    ? await query('SELECT id, data, created_at, updated_at FROM events ORDER BY updated_at DESC')
+    : await query(
+      `SELECT e.id, e.data, e.created_at, e.updated_at FROM events e
+       JOIN event_members em ON em.event_id = e.id
+       WHERE em.user_id = $1
+       ORDER BY e.updated_at DESC`,
+      [request.user.id],
+    )
+  const filesResult = await query(
+    `SELECT id, event_id, task_id, original_name, mime_type, size_bytes, created_at
+     FROM files WHERE uploaded_by = $1 ORDER BY created_at DESC`,
+    [request.user.id],
+  )
+  const auditResult = await query(
+    'SELECT actor_email, action, created_at FROM audit_logs WHERE actor_id = $1 ORDER BY created_at DESC LIMIT 200',
+    [request.user.id],
+  )
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    user: publicUser(request.user),
+    events: eventsResult.rows.map((row) => ({ id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, data: row.data })),
+    uploadedFiles: filesResult.rows,
+    auditLog: auditResult.rows,
+  }
+  response.setHeader('Content-Type', 'application/json; charset=utf-8')
+  response.setHeader('Content-Disposition', `attachment; filename="eventlotse-account-${sanitizeFilename(request.user.email)}.json"`)
+  response.json(payload)
+})
+
+app.delete('/api/account', requireAuth, async (request, response) => {
+  if (request.user.role === 'Admin') {
+    return response.status(400).json({ message: 'Admin-Accounts können nicht selbst gelöscht werden. Lege zuerst einen zweiten Admin an und nutze die Server-Wartung.' })
+  }
+
+  const eventRows = await query(
+    `SELECT e.id, e.data
+     FROM events e
+     JOIN event_members em ON em.event_id = e.id
+     WHERE em.user_id = $1`,
+    [request.user.id],
+  )
+  await transaction(async (client) => {
+    for (const row of eventRows.rows) {
+      const event = eventFromRow(row)
+      const members = (event.members || []).filter((member) => member.id !== request.user.id && member.email !== request.user.email)
+      await client.query('UPDATE events SET data = $1, updated_at = now() WHERE id = $2', [JSON.stringify({ ...event, members }), row.id])
+    }
+    await client.query('DELETE FROM users WHERE id = $1', [request.user.id])
+  })
+  await audit(null, `Benutzer "${request.user.email}" hat den eigenen Account gelöscht.`)
+  clearAuthCookie(response)
+  clearCsrfCookie(response)
+  response.json({ ok: true })
 })
 
 app.get('/api/bootstrap', requireAuth, async (request, response) => {
@@ -598,11 +675,11 @@ app.delete('/api/files/:fileId', requireAuth, async (request, response) => {
   response.json({ ok: true })
 })
 
-app.post('/api/uploads', requireAuth, upload.single('file'), async (request, response) => {
+app.post('/api/uploads', uploadLimiter, requireAuth, upload.single('file'), async (request, response) => {
   const { eventId, taskId } = request.body
   const file = request.file
   if (!file) return response.status(400).json({ message: 'Keine Datei empfangen.' })
-  if (isBlockedUpload(file)) {
+  if (isBlockedUpload(file) || hasExecutableSignature(file)) {
     cleanupUploadedFile(file)
     return response.status(400).json({ message: 'Diese Dateiart ist aus Sicherheitsgründen gesperrt.' })
   }

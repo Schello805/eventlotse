@@ -54,36 +54,38 @@ server {
 ## Backups
 
 ```bash
-sudo /opt/eventlotse/scripts/backup-postgres.sh
+sudo /opt/eventlotse/scripts/backup.sh
 ```
 
-Die Backups liegen standardmäßig unter `/var/backups/eventlotse` und werden als komprimierte SQL-Dateien gespeichert.
+Die Backups liegen standardmäßig unter `/var/backups/eventlotse` und enthalten:
+
+- PostgreSQL-Dump
+- Upload-Verzeichnis
+- Umgebungskonfiguration aus `/etc/eventlotse/eventlotse.env`
+
+Alte Backups werden nach `KEEP_DAYS` Tagen gelöscht, Standard ist `14`.
 
 ## Restore
 
-1. Eventlotse kurz stoppen:
+1. Eventlotse kurz stoppen und sicherstellen, dass die Ziel-Datenbank leer oder bewusst überschreibbar ist:
 
 ```bash
 sudo systemctl stop eventlotse
 ```
 
-2. Passende Backup-Datei auswählen und in die Datenbank zurückspielen:
+2. Passendes Backup-Archiv auswählen und zurückspielen:
 
 ```bash
-set -a
-. /etc/eventlotse/eventlotse.env
-set +a
-gunzip -c /var/backups/eventlotse/eventlotse-YYYYMMDD-HHMMSS.sql.gz | psql "$DATABASE_URL"
+sudo /opt/eventlotse/scripts/restore.sh /var/backups/eventlotse/eventlotse-YYYYMMDD-HHMMSS.tar.gz
 ```
 
-3. Service wieder starten:
+3. Service prüfen:
 
 ```bash
-sudo systemctl start eventlotse
 sudo systemctl status eventlotse
 ```
 
-Wenn du komplett auf einen neuen Server umziehst, zuerst Installation ausführen, dann Service stoppen, Restore einspielen und anschließend wieder starten.
+Wenn du komplett auf einen neuen Server umziehst, zuerst Installation ausführen, dann Service stoppen, Restore einspielen und anschließend wieder starten. Mit `RESTORE_ENV=true` kann auch die gesicherte Umgebungskonfiguration zurückgeschrieben werden.
 
 ## Enthaltene Produktionsbausteine
 
@@ -100,10 +102,13 @@ Wenn du komplett auf einen neuen Server umziehst, zuerst Installation ausführen
 - iCal-, CSV-, XLSX- und PDF-Export
 - manueller und automatischer Erinnerungslauf für fällige Aufgaben
 - verschlüsselte Speicherung des SMTP-Passworts
-- Backup-Script für PostgreSQL
-- Restore-Anleitung
+- CSRF-Schutz für angemeldete Schreibzugriffe
+- Upload-Schutz gegen ausführbare Endungen und Signaturen
+- Backup-/Restore-Scripte für Datenbank, Uploads und Umgebung
+- Account-Datenexport im Profil
 
 ## Nächste Ausbaustufen
 
 - Push-Erinnerungen zusätzlich zu E-Mail
 - feinere Rechte pro Aufgabenkarte
+- optionale Zwei-Faktor-Anmeldung für Admins

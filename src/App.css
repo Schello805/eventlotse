@@ -910,6 +910,10 @@ form {
   justify-content: flex-end;
 }
 
+.button-row.left {
+  justify-content: flex-start;
+}
+
 .section-head h2 {
   margin-bottom: 0;
 }

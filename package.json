@@ -1,7 +1,7 @@
 {
   "name": "eventlotse",
   "private": true,
-  "version": "0.4.22",
+  "version": "0.4.23",
   "description": "Self-hosted planning app for private events, teams, tasks, runsheets, budgets and booking.",
   "license": "PolyForm-Noncommercial-1.0.0",
   "homepage": "https://github.com/Schello805/eventlotse",
@@ -16,8 +16,10 @@
     "server": "node server/server.js",
     "db:migrate": "node server/migrate.js",
     "admin:reset-password": "node scripts/reset-admin-password.mjs",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/write-version.mjs && tsc -b && vite build",
     "lint": "eslint .",
+    "test": "node --test server/*.test.js",
+    "test:smoke": "node scripts/smoke-check.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

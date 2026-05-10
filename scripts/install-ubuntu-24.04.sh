@@ -208,6 +208,8 @@ main() {
   set +a
   npm run db:migrate
   npm run build
+  npm test
+  npm run test:smoke
 
   write_systemd_service
   write_nginx_site

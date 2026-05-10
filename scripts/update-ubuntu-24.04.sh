@@ -373,6 +373,8 @@ main() {
   load_env
   npm run db:migrate
   npm run build
+  npm test
+  npm run test:smoke
   verify_dist_version
   npm prune --omit=dev
 

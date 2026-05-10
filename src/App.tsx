@@ -352,6 +352,21 @@ function isBlockedUploadFile(fileName: string) {
   return blockedUploadExtensions.has(extension)
 }
 
+function readCookie(name: string) {
+  return document.cookie
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1) || ''
+}
+
+function secureFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const headers = new Headers(init.headers)
+  const csrfToken = readCookie('eventlotse_csrf')
+  if (csrfToken) headers.set('X-Eventlotse-CSRF', decodeURIComponent(csrfToken))
+  return fetch(input, { ...init, headers, credentials: 'include' })
+}
+
 function normalizeRole(role: string): Role {
   if (role === 'Admin' || role === 'Helfer') return role
   return 'Helfer'
@@ -481,10 +496,9 @@ function App() {
     setEvents((current) => current.map((event) => (event.id === next.id ? next : event)))
     addAudit(`Event "${next.name}" wurde aktualisiert.`)
     setSaveState('saving')
-    fetch(`/api/events/${next.id}`, {
+    secureFetch(`/api/events/${next.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify(next),
     })
       .then((response) => setSaveState(response.ok ? 'saved' : 'error'))
@@ -494,7 +508,7 @@ function App() {
   const deleteEvent = async (eventId: string) => {
     const event = events.find((entry) => entry.id === eventId)
     if (!event) return
-    const response = await fetch(`/api/events/${eventId}`, { method: 'DELETE', credentials: 'include' }).catch(() => null)
+    const response = await secureFetch(`/api/events/${eventId}`, { method: 'DELETE' }).catch(() => null)
     if (!response?.ok) {
       notify('Event konnte nicht gelöscht werden.')
       return
@@ -584,10 +598,9 @@ function App() {
     setEvents((current) => [next, ...current])
     addAudit(`Event "${next.name}" wurde angelegt.`)
     notify(`Event "${next.name}" wurde angelegt.`)
-    fetch('/api/events', {
+    secureFetch('/api/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify(next),
     })
       .then((response) => (response.ok ? response.json() : null))
@@ -977,10 +990,9 @@ function ProfilePage({
       return
     }
     try {
-      const response = await fetch('/api/auth/change-password', {
+      const response = await secureFetch('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           currentPassword: passwordDraft.currentPassword,
           newPassword: passwordDraft.newPassword,
@@ -997,10 +1009,9 @@ function ProfilePage({
 
   const saveProfile = async () => {
     try {
-      const response = await fetch('/api/auth/profile', {
+      const response = await secureFetch('/api/auth/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(profileDraft),
       })
       const data = await response.json().catch(() => null)
@@ -1010,6 +1021,22 @@ function ProfilePage({
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Profil konnte nicht gespeichert werden.')
     }
+  }
+
+  const deleteOwnAccount = async () => {
+    if (session.role === 'Admin') {
+      notify('Admin-Accounts können nicht im Profil gelöscht werden. Das schützt dich vor versehentlichem Aussperren.')
+      return
+    }
+    if (!window.confirm('Eigenen Account wirklich löschen? Danach verlierst du den Zugriff auf deine Event-Einladungen.')) return
+    const response = await secureFetch('/api/account', { method: 'DELETE' })
+    const data = await response.json().catch(() => null)
+    if (!response.ok) {
+      notify(data?.message || 'Account konnte nicht gelöscht werden.')
+      return
+    }
+    setSession({ email: 'info@schellenberger.biz', name: '', profileNote: '', role: 'Helfer', authenticated: false })
+    notify('Dein Account wurde gelöscht.')
   }
 
   return (
@@ -1059,6 +1086,19 @@ function ProfilePage({
             <input type="password" value={passwordDraft.repeatPassword} onChange={(event) => setPasswordDraft({ ...passwordDraft, repeatPassword: event.target.value })} />
           </label>
           <button className="primary profile-save-button" type="button" onClick={changePassword}><Save size={16} /> Passwort speichern</button>
+        </div>
+      </div>
+      <div className="panel">
+        <div className="section-head">
+          <div>
+            <h2>Datenschutz</h2>
+            <p className="help-text">Hier kannst du deine gespeicherten Accountdaten exportieren. Helfer können den eigenen Account löschen, Admins nutzen dafür bewusst die Server-Wartung.</p>
+          </div>
+          <ShieldCheck size={18} />
+        </div>
+        <div className="button-row left">
+          <a className="ghost" href="/api/account/export"><Download size={16} /> Meine Daten exportieren</a>
+          <button className="ghost danger" type="button" onClick={deleteOwnAccount} disabled={session.role === 'Admin'}><Trash2 size={16} /> Account löschen</button>
         </div>
       </div>
     </section>
@@ -1398,10 +1438,9 @@ function EventWorkspace({
     if (!newMember.email.trim()) return
     const email = newMember.email.trim()
     try {
-      const response = await fetch(`/api/events/${event.id}/members`, {
+      const response = await secureFetch(`/api/events/${event.id}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ email, name: newMember.name, note: newMember.note, role: 'Helfer' }),
       })
       if (response.ok) {
@@ -1437,7 +1476,7 @@ function EventWorkspace({
       return
     }
     try {
-      const response = await fetch(`/api/events/${event.id}/members/${member.id}`, { method: 'DELETE', credentials: 'include' })
+      const response = await secureFetch(`/api/events/${event.id}/members/${member.id}`, { method: 'DELETE' })
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.message || 'Mitglied konnte nicht entfernt werden.')
       updateEvent(data.event)
@@ -1482,10 +1521,9 @@ function EventWorkspace({
     }
     const nextTemplates = [template, ...templates.filter((entry) => entry.id !== template.id)]
     try {
-      const response = await fetch('/api/admin/templates', {
+      const response = await secureFetch('/api/admin/templates', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ templates: nextTemplates }),
       })
       if (!response.ok) {
@@ -1502,7 +1540,7 @@ function EventWorkspace({
   }
 
   const deleteFile = async (fileId: string) => {
-    const response = await fetch(`/api/files/${fileId}`, { method: 'DELETE', credentials: 'include' })
+    const response = await secureFetch(`/api/files/${fileId}`, { method: 'DELETE' })
     if (!response.ok) {
       notify('Datei konnte nicht gelöscht werden.')
       return
@@ -1953,10 +1991,9 @@ function AdminPage({
     setSettings(nextSettings)
     addAudit('Systemeinstellungen wurden gespeichert.')
     try {
-      const response = await fetch('/api/admin/settings', {
+      const response = await secureFetch('/api/admin/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(data),
       })
       const result = await response.json().catch(() => null)
@@ -1972,10 +2009,9 @@ function AdminPage({
   const sendTestMail = async () => {
     setTestMailPending(true)
     try {
-      const response = await fetch('/api/admin/test-mail', {
+      const response = await secureFetch('/api/admin/test-mail', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ to: testMailTo }),
       })
       if (!response.ok) {
@@ -1996,10 +2032,9 @@ function AdminPage({
     setTemplates(normalized)
     setSettings((current) => ({ ...current, eventTemplates: normalized }))
     try {
-      const response = await fetch('/api/admin/templates', {
+      const response = await secureFetch('/api/admin/templates', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ templates: normalized }),
       })
       const result = await response.json().catch(() => null)
@@ -2061,10 +2096,9 @@ function AdminPage({
       return
     }
     try {
-      const response = await fetch('/api/auth/change-password', {
+      const response = await secureFetch('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           currentPassword: passwordDraft.currentPassword,
           newPassword: passwordDraft.newPassword,
@@ -2081,7 +2115,7 @@ function AdminPage({
   }
 
   const runReminders = async () => {
-    const response = await fetch('/api/admin/reminders/run', { method: 'POST', credentials: 'include' })
+    const response = await secureFetch('/api/admin/reminders/run', { method: 'POST' })
     const data = await response.json().catch(() => null)
     if (!response.ok) {
       notify(data?.message || 'Erinnerungen konnten nicht gesendet werden.')
@@ -2489,9 +2523,8 @@ Terminiert: Bis wann?`}
                       formData.append('eventId', eventId)
                       formData.append('taskId', task.id)
                       try {
-                        const response = await fetch('/api/uploads', {
+                        const response = await secureFetch('/api/uploads', {
                           method: 'POST',
-                          credentials: 'include',
                           body: formData,
                         })
                         if (!response.ok) {

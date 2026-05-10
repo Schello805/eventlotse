@@ -34,3 +34,6 @@
 - Rollen- und Rechtesystem
 - Benachrichtigungen
 - Backup- und Restore-Dokumentation
+- normalisierte Tabellen für Aufgaben, Zeitplan, Budget und Team statt großem Event-JSON
+- optionale Zwei-Faktor-Anmeldung für Admins
+- feinere Rechte pro Aufgabenkarte

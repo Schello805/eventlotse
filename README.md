@@ -6,7 +6,7 @@ Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.22` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.4.23` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
@@ -18,6 +18,7 @@ Rev. `v0.4.22` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 - Aktionskarten mit Kanban-Unteraufgaben, Status, Verantwortlichen, Deadline und Datei-Merkliste
 - klare Aufgaben-Akkordeons, bei denen immer nur ein Arbeitsbereich geöffnet ist
 - eventbezogene Teamverwaltung per E-Mail, Name, Funktion/Kommentar und Entfernen aus dem Event
+- Account-Datenexport im Profil und Selbstlöschung für Helfer
 - hübsche HTML-Einladungsmails mit Eventinfos
 - Budget-Übersicht für Einnahmen und Ausgaben
 - Infrastruktur-Checkliste
@@ -37,9 +38,9 @@ Rev. `v0.4.22` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 - iCal-Export, CSV-/XLSX-Aufgabenexport und PDF-Ablaufplan
 - manueller und automatischer Erinnerungslauf für fällige Aufgaben
 - SMTP-Passwort wird verschlüsselt gespeichert
-- PostgreSQL-Migrationen, Upload-Endpunkt und Backup-Script
-- Upload-Validierung gegen ausführbare Dateien wie `.exe`, `.msi`, `.bat`, `.cmd`, `.ps1` oder `.sh`
-- Restore-Anleitung für PostgreSQL-Backups
+- PostgreSQL-Migrationen, Upload-Endpunkt und Backup-/Restore-Scripte
+- CSRF-Schutz, Rate-Limits und Upload-Validierung gegen ausführbare Dateien und Signaturen
+- automatische Node-Tests für Rechteprüfung und Upload-Sicherheit
 - Echte App-Routen für Dashboard, Admin, Eventdetails und Rechtsseiten
 - Validierte Formulare mit `react-hook-form` und `zod`
 - Globale Suche, Event-Tabs, mobile Aufbauansicht und hilfreiche Leerzustände
@@ -81,6 +82,8 @@ npm run dev:server
 
 ```bash
 npm run build
+npm test
+npm run test:smoke
 npm run preview
 ```
 
@@ -152,7 +155,15 @@ sudo SERVER_NAME=eventlotse.schellenberger.biz ./scripts/update-ubuntu-24.04.sh
 ### Backups
 
 ```bash
-sudo /opt/eventlotse/scripts/backup-postgres.sh
+sudo /opt/eventlotse/scripts/backup.sh
+```
+
+Restore auf einem vorbereiteten oder neuen Server:
+
+```bash
+sudo systemctl stop eventlotse
+sudo /opt/eventlotse/scripts/restore.sh /var/backups/eventlotse/eventlotse-YYYYMMDD-HHMMSS.tar.gz
+sudo systemctl status eventlotse
 ```
 
 ### Admin-Passwort zurücksetzen
