@@ -19,6 +19,8 @@ NGINX_SITE_LINK="/etc/nginx/sites-enabled/eventlotse"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/eventlotse}"
 SKIP_BACKUP="${SKIP_BACKUP:-false}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-30}"
+UPDATE_BRANCH="${UPDATE_BRANCH:-}"
+EVENTLOTSE_SELF_UPDATED="${EVENTLOTSE_SELF_UPDATED:-false}"
 
 log() {
   printf '\n[Eventlotse] %s\n' "$1"
@@ -37,6 +39,46 @@ require_root() {
   if [ "$(id -u)" -ne 0 ]; then
     echo "Bitte als root ausführen, z.B. mit sudo." >&2
     exit 1
+  fi
+}
+
+remote_default_branch() {
+  local branch
+  branch="$(git -C "$APP_DIR" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||' || true)"
+  if [ -n "$branch" ]; then
+    printf '%s\n' "$branch"
+    return
+  fi
+  branch="$(git -C "$APP_DIR" branch --show-current 2>/dev/null || true)"
+  if [ -n "$branch" ]; then
+    printf '%s\n' "$branch"
+    return
+  fi
+  printf 'main\n'
+}
+
+update_repository_from_github() {
+  local branch before after script_before script_after
+  branch="${UPDATE_BRANCH:-$(remote_default_branch)}"
+  before="$(git -C "$APP_DIR" rev-parse HEAD)"
+  script_before="$(git -C "$APP_DIR" rev-parse HEAD:scripts/update-ubuntu-24.04.sh 2>/dev/null || true)"
+
+  log "Hole neueste Revision von GitHub (${branch})."
+  git -C "$APP_DIR" fetch origin "$branch"
+  git -C "$APP_DIR" merge --ff-only "origin/${branch}"
+
+  after="$(git -C "$APP_DIR" rev-parse HEAD)"
+  script_after="$(git -C "$APP_DIR" rev-parse HEAD:scripts/update-ubuntu-24.04.sh 2>/dev/null || true)"
+  if [ "$before" != "$after" ]; then
+    log "Repository aktualisiert: ${before:0:7} -> ${after:0:7}."
+  else
+    log "Repository ist bereits aktuell: ${after:0:7}."
+  fi
+
+  if [ "$EVENTLOTSE_SELF_UPDATED" != "true" ] && [ -n "$script_before" ] && [ "$script_before" != "$script_after" ]; then
+    log "Updatescript wurde aktualisiert. Starte neue Script-Version."
+    export EVENTLOTSE_SELF_UPDATED=true
+    exec "$APP_DIR/scripts/update-ubuntu-24.04.sh" "$@"
   fi
 }
 
@@ -354,6 +396,7 @@ main() {
     exit 1
   fi
 
+  update_repository_from_github "$@"
   ensure_packages
   ensure_env_file
   repair_env_file
@@ -363,9 +406,6 @@ main() {
   install -d -m 0750 -o www-data -g www-data "${UPLOAD_DIR:-/var/lib/eventlotse/uploads}"
   ensure_systemd_service
   backup_current_state
-
-  log "Hole neueste Version."
-  git -C "$APP_DIR" pull --ff-only
 
   log "Installiere Abhängigkeiten und baue die App."
   cd "$APP_DIR"
