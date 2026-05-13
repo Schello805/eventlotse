@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.31
+
+- Profilbereich kann eine E-Mail-Änderung anfordern.
+- Neue E-Mail-Adresse wird erst nach Verifikation per Bestätigungslink übernommen.
+- Event-Team-Einträge werden nach bestätigter E-Mail-Änderung synchronisiert.
+
 ## v0.4.30
 
 - Tooltips werden jetzt als feste Overlay-Hinweise angezeigt und nicht mehr von Karten oder Panels abgeschnitten.

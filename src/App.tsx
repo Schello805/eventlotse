@@ -775,6 +775,7 @@ function App() {
             }
           />
           <Route path="/profil" element={session.authenticated ? <ProfilePage session={session} setSession={setSession} notify={notify} /> : <LoginRequired />} />
+          <Route path="/email-aendern/:token" element={<EmailChangeConfirmPage setSession={setSession} notify={notify} />} />
           <Route path="/impressum" element={<LegalPage page="impressum" />} />
           <Route path="/datenschutz" element={<LegalPage page="datenschutz" />} />
           <Route path="/cookies" element={<LegalPage page="cookies" />} />
@@ -1081,6 +1082,8 @@ function ProfilePage({
 }) {
   const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' })
   const [profileDraft, setProfileDraft] = useState({ name: session.name || '', profileNote: session.profileNote || '' })
+  const [emailDraft, setEmailDraft] = useState('')
+  const [emailPending, setEmailPending] = useState(false)
 
   const changePassword = async () => {
     if (passwordDraft.newPassword !== passwordDraft.repeatPassword) {
@@ -1118,6 +1121,30 @@ function ProfilePage({
       notify('Profil wurde gespeichert.')
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Profil konnte nicht gespeichert werden.')
+    }
+  }
+
+  const requestEmailChange = async () => {
+    const email = emailDraft.trim()
+    if (!email) {
+      notify('Bitte die neue E-Mail-Adresse eintragen.')
+      return
+    }
+    setEmailPending(true)
+    try {
+      const response = await secureFetch('/api/auth/request-email-change', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.message || 'Bestätigungsmail konnte nicht versendet werden.')
+      setEmailDraft('')
+      notify(`Bestätigungsmail an ${email} wurde versendet. Die Adresse ändert sich erst nach dem Klick auf den Link.`)
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Bestätigungsmail konnte nicht versendet werden.')
+    } finally {
+      setEmailPending(false)
     }
   }
 
@@ -1163,6 +1190,28 @@ function ProfilePage({
             <textarea value={profileDraft.profileNote} onChange={(event) => setProfileDraft({ ...profileDraft, profileNote: event.target.value })} placeholder="z.B. Technik, Bar, Aufbau, Ansprechpartner vor Ort" />
           </label>
           <button className="primary profile-save-button" type="button" onClick={saveProfile}><Save size={16} /> Profil speichern</button>
+        </div>
+      </div>
+      <div className="panel">
+        <div className="section-head">
+          <div>
+            <h2>E-Mail-Adresse ändern</h2>
+            <p className="help-text">Die neue Adresse wird erst übernommen, wenn du den Bestätigungslink in der neuen Mailbox anklickst.</p>
+          </div>
+          <Mail size={18} />
+        </div>
+        <div className="admin-form">
+          <label className="field">
+            <span>Aktuelle E-Mail</span>
+            <input value={session.email} disabled />
+          </label>
+          <label className="field">
+            <span>Neue E-Mail</span>
+            <input type="email" value={emailDraft} onChange={(event) => setEmailDraft(event.target.value)} placeholder="neue-adresse@example.de" />
+          </label>
+          <button className="primary profile-save-button" type="button" onClick={requestEmailChange} disabled={emailPending}>
+            <Mail size={16} /> {emailPending ? 'Sende...' : 'Bestätigungsmail senden'}
+          </button>
         </div>
       </div>
       <div className="panel">
@@ -1264,6 +1313,57 @@ function InvitePage({ notify }: { notify: (message: string, actionLabel?: string
       ) : !error ? (
         <p>Einladung wird geprüft...</p>
       ) : null}
+    </section>
+  )
+}
+
+function EmailChangeConfirmPage({
+  setSession,
+  notify,
+}: {
+  setSession: (session: { email: string; name: string; profileNote: string; role: Role; authenticated: boolean }) => void
+  notify: (message: string, actionLabel?: string, onAction?: () => void) => void
+}) {
+  const { token } = useParams()
+  const navigate = useNavigate()
+  const [state, setState] = useState<'loading' | 'success' | 'error'>('loading')
+  const [message, setMessage] = useState('E-Mail-Adresse wird bestätigt...')
+
+  useEffect(() => {
+    if (!token) return
+    secureFetch(`/api/email-change/${token}/confirm`, { method: 'POST' })
+      .then(async (response) => {
+        const data = await response.json().catch(() => null)
+        if (!response.ok) throw new Error(data?.message || 'E-Mail-Adresse konnte nicht bestätigt werden.')
+        setSession({
+          email: data.user.email,
+          name: data.user.name || '',
+          profileNote: data.user.profileNote || '',
+          role: normalizeRole(data.user.role),
+          authenticated: true,
+        })
+        setState('success')
+        setMessage(`Deine E-Mail-Adresse wurde auf ${data.user.email} geändert.`)
+        notify('E-Mail-Adresse wurde bestätigt.')
+      })
+      .catch((error) => {
+        setState('error')
+        setMessage(error instanceof Error ? error.message : 'E-Mail-Adresse konnte nicht bestätigt werden.')
+      })
+  }, [notify, setSession, token])
+
+  return (
+    <section className="panel invite-page">
+      <div className="section-head">
+        <div>
+          <h2>E-Mail-Adresse bestätigen</h2>
+          <p className="help-text">{message}</p>
+        </div>
+        <Mail size={18} />
+      </div>
+      {state === 'loading' && <p>Bitte einen Moment warten.</p>}
+      {state === 'success' && <button className="primary" type="button" onClick={() => navigate('/profil')}>Zum Profil</button>}
+      {state === 'error' && <Link className="ghost" to="/profil">Zurück zum Profil</Link>}
     </section>
   )
 }

@@ -18,7 +18,7 @@ import { encryptSecret } from './crypto-box.js'
 import { canHelperUpdateEvent } from './event-permissions.js'
 import { syncNormalizedEvent } from './event-store.js'
 import { pool, query, transaction } from './db.js'
-import { createTransport, invitationMail, passwordResetMail, reminderMail, testMail } from './mail.js'
+import { createTransport, emailChangeMail, invitationMail, passwordResetMail, reminderMail, testMail } from './mail.js'
 import { dueTasksForEvent } from './reminders.js'
 import { mergeAppSettings, normalizeEventTemplates, sanitizeAppSettings } from './settings.js'
 import { hasExecutableSignature, isBlockedUpload } from './upload-security.js'
@@ -116,7 +116,7 @@ app.use((request, response, next) => {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) return next()
   if (!request.path.startsWith('/api/')) return next()
   if (request.header('authorization')) return next()
-  if (request.path === '/api/auth/login' || request.path === '/api/auth/logout' || request.path.startsWith('/api/invites/')) return next()
+  if (request.path === '/api/auth/login' || request.path === '/api/auth/logout' || request.path.startsWith('/api/invites/') || request.path.startsWith('/api/email-change/')) return next()
 
   const cookieToken = request.cookies?.[csrfCookieName]
   const headerToken = request.header('x-eventlotse-csrf')
@@ -375,6 +375,92 @@ app.post('/api/auth/profile', requireAuth, async (request, response) => {
     await query('UPDATE events SET data = $1, updated_at = now() WHERE id = $2', [JSON.stringify({ ...event, members }), row.id])
   }
   await audit(request.user, 'Profil wurde aktualisiert.')
+  response.json({ user: publicUser(updatedUser) })
+})
+
+app.post('/api/auth/request-email-change', requireAuth, async (request, response) => {
+  const newEmail = String(request.body?.email || '').toLowerCase().trim()
+  if (!newEmail.includes('@') || newEmail.length > 180) {
+    return response.status(400).json({ message: 'Bitte eine gültige neue E-Mail-Adresse eingeben.' })
+  }
+  if (newEmail === request.user.email) {
+    return response.status(400).json({ message: 'Das ist bereits deine aktuelle E-Mail-Adresse.' })
+  }
+  const existing = await query('SELECT id FROM users WHERE email = $1', [newEmail])
+  if (existing.rowCount) {
+    return response.status(409).json({ message: 'Diese E-Mail-Adresse wird bereits verwendet.' })
+  }
+  const token = crypto.randomBytes(32).toString('base64url')
+  await query(
+    `INSERT INTO email_change_tokens (token, user_id, old_email, new_email, expires_at)
+     VALUES ($1, $2, $3, $4, now() + interval '24 hours')`,
+    [token, request.user.id, request.user.email, newEmail],
+  )
+  const settings = mergeAppSettings(await loadStoredSettings())
+  const confirmUrl = `${settings.baseUrl}/email-aendern/${token}`
+  const transport = await createTransport()
+  await transport.sendMail(await emailChangeMail({
+    to: newEmail,
+    name: request.user.name,
+    oldEmail: request.user.email,
+    confirmUrl,
+  }))
+  await audit(request.user, `E-Mail-Änderung von "${request.user.email}" zu "${newEmail}" wurde angefordert.`)
+  response.json({ ok: true })
+})
+
+app.post('/api/email-change/:token/confirm', async (request, response) => {
+  const result = await query(
+    `SELECT ect.token, ect.user_id, ect.old_email, ect.new_email, ect.expires_at, ect.used_at, u.name, u.profile_note, u.role, u.active
+     FROM email_change_tokens ect
+     JOIN users u ON u.id = ect.user_id
+     WHERE ect.token = $1`,
+    [request.params.token],
+  )
+  const change = result.rows[0]
+  if (!change || change.used_at || new Date(change.expires_at) < new Date()) {
+    return response.status(400).json({ message: 'Dieser Bestätigungslink ist ungültig oder abgelaufen.' })
+  }
+  if (!change.active) {
+    return response.status(400).json({ message: 'Dieser Account ist deaktiviert.' })
+  }
+  const duplicate = await query('SELECT id FROM users WHERE email = $1 AND id <> $2', [change.new_email, change.user_id])
+  if (duplicate.rowCount) {
+    return response.status(409).json({ message: 'Diese E-Mail-Adresse wird inzwischen bereits verwendet.' })
+  }
+
+  const updatedUser = await transaction(async (client) => {
+    const userResult = await client.query(
+      `UPDATE users
+       SET email = $1, updated_at = now()
+       WHERE id = $2
+       RETURNING id, email, name, profile_note, role, active, last_login_at`,
+      [change.new_email, change.user_id],
+    )
+    await client.query('UPDATE email_change_tokens SET used_at = now() WHERE token = $1', [change.token])
+    await client.query('UPDATE email_change_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL AND token <> $2', [change.user_id, change.token])
+    const eventRows = await client.query(
+      `SELECT e.id, e.data
+       FROM events e
+       JOIN event_members em ON em.event_id = e.id
+       WHERE em.user_id = $1`,
+      [change.user_id],
+    )
+    for (const row of eventRows.rows) {
+      const event = eventFromRow(row)
+      const members = (event.members || []).map((member) =>
+        member.id === change.user_id || member.email === change.old_email
+          ? { ...member, email: change.new_email }
+          : member,
+      )
+      await client.query('UPDATE events SET data = $1, updated_at = now() WHERE id = $2', [JSON.stringify({ ...event, members }), row.id])
+    }
+    return userResult.rows[0]
+  })
+
+  await audit(updatedUser, `E-Mail-Adresse wurde von "${change.old_email}" zu "${change.new_email}" geändert.`)
+  setAuthCookie(response, signToken(updatedUser))
+  setCsrfCookie(response)
   response.json({ user: publicUser(updatedUser) })
 })
 

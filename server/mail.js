@@ -132,6 +132,27 @@ export async function passwordResetMail({ to, name, resetUrl, actor }) {
   }
 }
 
+export async function emailChangeMail({ to, name, oldEmail, confirmUrl }) {
+  const settings = await getMailSettings()
+  return {
+    from: settings.from,
+    to,
+    subject: 'Eventlotse E-Mail-Adresse bestätigen',
+    html: baseTemplate({
+      title: 'Neue E-Mail-Adresse bestätigen',
+      intro: 'Bitte bestätige, dass diese Adresse künftig für deinen Eventlotse-Account verwendet werden soll.',
+      buttonUrl: confirmUrl,
+      buttonLabel: 'E-Mail-Adresse bestätigen',
+      sections: [
+        { label: 'Account', value: name || oldEmail },
+        { label: 'Bisherige E-Mail', value: oldEmail },
+        { label: 'Neue E-Mail', value: to },
+        { label: 'Gültigkeit', value: 'Der Link ist 24 Stunden gültig. Wenn du diese Änderung nicht angefordert hast, ignoriere diese Mail.' },
+      ],
+    }),
+  }
+}
+
 export async function reminderMail({ to, event, tasks }) {
   const settings = await getMailSettings()
   return {

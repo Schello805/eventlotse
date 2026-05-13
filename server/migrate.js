@@ -58,6 +58,16 @@ CREATE TABLE IF NOT EXISTS invite_tokens (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS email_change_tokens (
+  token text PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  old_email text NOT NULL,
+  new_email text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key text PRIMARY KEY,
   value jsonb NOT NULL,
@@ -131,6 +141,7 @@ CREATE INDEX IF NOT EXISTS idx_events_data_gin ON events USING gin (data);
 CREATE INDEX IF NOT EXISTS idx_event_members_user ON event_members (user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_invite_tokens_user ON invite_tokens (user_id);
+CREATE INDEX IF NOT EXISTS idx_email_change_tokens_user ON email_change_tokens (user_id);
 CREATE INDEX IF NOT EXISTS idx_event_actions_event ON event_actions (event_id, position);
 CREATE INDEX IF NOT EXISTS idx_event_tasks_event ON event_tasks (event_id, status, due_date);
 CREATE INDEX IF NOT EXISTS idx_event_tasks_action ON event_tasks (action_id, position);
