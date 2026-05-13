@@ -3050,36 +3050,26 @@ function ActionBoard({
                     </select>
                   </label>
                   <label className="task-field">
-                    <span>Beschreibung nach SMART</span>
+                    <span>Bemerkung</span>
                     <textarea
                       className="task-description-input"
-                      value={task.notes}
+                      value={
+                        task.notes && task.comments[0] && task.comments[0] !== task.notes
+                          ? `${task.notes}\n\n${task.comments[0]}`
+                          : task.notes || task.comments[0] || ''
+                      }
                       onChange={(change) =>
                         updateAction({
                           ...action,
-                          tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, notes: change.target.value } : entry)),
+                          tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, notes: change.target.value, comments: [] } : entry)),
                         })
                       }
-                      placeholder={`SMART formulieren:
+                      placeholder={`Bemerkung, Absprache oder SMART-Beschreibung:
 Spezifisch: Was genau?
 Messbar: Woran erkennen wir erledigt?
 Attraktiv/akzeptiert: Wer übernimmt es?
 Realistisch: Was wird gebraucht?
 Terminiert: Bis wann?`}
-                      disabled={!canEdit}
-                    />
-                  </label>
-                  <label className="task-field">
-                    <span>Bemerkung / Absprache optional</span>
-                    <textarea
-                      value={task.comments[0] || ''}
-                      onChange={(change) =>
-                        updateAction({
-                          ...action,
-                          tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, comments: [change.target.value, ...entry.comments.slice(1)] } : entry)),
-                        })
-                      }
-                      placeholder="Kurze Rückfrage, Absprache oder Besonderheit..."
                       disabled={!canEdit}
                     />
                   </label>

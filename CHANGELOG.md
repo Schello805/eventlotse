@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.37
+
+- Aufgabenkarte auf ein einziges Bemerkungsfeld reduziert.
+- Bestehende alte Aufgabenkommentare werden im verbleibenden Bemerkungsfeld angezeigt.
+
 ## v0.4.36
 
 - Drag-&-Drop auf Touch-Geräten zusätzlich per Pointer-Erkennung deaktiviert, auch auf Tablets mit großem Viewport.
