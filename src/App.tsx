@@ -2673,63 +2673,78 @@ function ActionBoard({
                 </div>
                 <details className="task-details">
                   <summary>Details bearbeiten</summary>
-                  <input
-                    type="date"
-                    value={task.due}
-                    onChange={(change) =>
-                      updateAction({
-                        ...action,
-                        tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, due: change.target.value } : entry)),
-                      })
-                    }
-                    disabled={!canEdit}
-                  />
-                  <select
-                    value={task.ownerIds[0] || ''}
-                    onChange={(change) =>
-                      updateAction({
-                        ...action,
-                        tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, ownerIds: change.target.value ? [change.target.value] : [] } : entry)),
-                      })
-                    }
-                    disabled={!canEdit}
-                  >
-                    <option value="">Verantwortlich offen</option>
-                    {members.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}
-                  </select>
-                  <select value={task.status} onChange={(change) => moveTask(task, change.target.value as Status)} disabled={!canEdit}>
-                    <option value="todo">Offen</option>
-                    <option value="doing">In Arbeit</option>
-                    <option value="done">Erledigt</option>
-                  </select>
-                  <textarea
-                    className="task-description-input"
-                    value={task.notes}
-                    onChange={(change) =>
-                      updateAction({
-                        ...action,
-                        tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, notes: change.target.value } : entry)),
-                      })
-                    }
-                    placeholder={`SMART formulieren:
+                  <label className="task-field">
+                    <span>Datum</span>
+                    <input
+                      type="date"
+                      value={task.due}
+                      onChange={(change) =>
+                        updateAction({
+                          ...action,
+                          tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, due: change.target.value } : entry)),
+                        })
+                      }
+                      disabled={!canEdit}
+                    />
+                  </label>
+                  <label className="task-field">
+                    <span>Verantwortlich</span>
+                    <select
+                      value={task.ownerIds[0] || ''}
+                      onChange={(change) =>
+                        updateAction({
+                          ...action,
+                          tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, ownerIds: change.target.value ? [change.target.value] : [] } : entry)),
+                        })
+                      }
+                      disabled={!canEdit}
+                    >
+                      <option value="">Verantwortlich offen</option>
+                      {members.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="task-field">
+                    <span>Status</span>
+                    <select value={task.status} onChange={(change) => moveTask(task, change.target.value as Status)} disabled={!canEdit}>
+                      <option value="todo">Offen</option>
+                      <option value="doing">In Arbeit</option>
+                      <option value="done">Erledigt</option>
+                    </select>
+                  </label>
+                  <label className="task-field">
+                    <span>Beschreibung nach SMART</span>
+                    <textarea
+                      className="task-description-input"
+                      value={task.notes}
+                      onChange={(change) =>
+                        updateAction({
+                          ...action,
+                          tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, notes: change.target.value } : entry)),
+                        })
+                      }
+                      placeholder={`SMART formulieren:
 Spezifisch: Was genau?
 Messbar: Woran erkennen wir erledigt?
 Attraktiv/akzeptiert: Wer übernimmt es?
 Realistisch: Was wird gebraucht?
 Terminiert: Bis wann?`}
-                    disabled={!canEdit}
-                  />
-                  <textarea
-                    value={task.comments[0] || ''}
-                    onChange={(change) =>
-                      updateAction({
-                        ...action,
-                        tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, comments: [change.target.value, ...entry.comments.slice(1)] } : entry)),
-                      })
-                    }
-                    placeholder="Bemerkungen: kurze Absprachen, Rückfragen oder Besonderheiten..."
-                    disabled={!canEdit}
-                  />
+                      disabled={!canEdit}
+                    />
+                  </label>
+                  <label className="task-field">
+                    <span>Bemerkung / Absprache optional</span>
+                    <textarea
+                      value={task.comments[0] || ''}
+                      onChange={(change) =>
+                        updateAction({
+                          ...action,
+                          tasks: action.tasks.map((entry) => (entry.id === task.id ? { ...entry, comments: [change.target.value, ...entry.comments.slice(1)] } : entry)),
+                        })
+                      }
+                      placeholder="Kurze Rückfrage, Absprache oder Besonderheit..."
+                      disabled={!canEdit}
+                    />
+                  </label>
                 </details>
                 <div className="owner-row">
                   {members.slice(0, 4).map((member) => (

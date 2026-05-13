@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.28
+
+- Aufgaben-Detailfelder klar beschriftet, damit SMART-Beschreibung und optionale Bemerkung nicht mehr wie doppelte Kommentarfelder wirken.
+
 ## v0.4.27
 
 - Aufgabenbeschreibung in Kanban-Karten deutlich vergrößert.
