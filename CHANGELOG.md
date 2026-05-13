@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.34
+
+- Mobiles Event-Untermenü von horizontalem Scrollen auf sichtbares 2-Spalten-Menü umgestellt.
+- Touch-Flächen der Event-Tabs auf Smartphones vergrößert.
+
 ## v0.4.33
 
 - Doppelte Passwortänderung aus dem Adminbereich entfernt; Passwort und E-Mail liegen im Profil.

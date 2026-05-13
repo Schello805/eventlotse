@@ -2194,7 +2194,22 @@ form {
   }
 
   .event-tabs {
-    overflow-x: auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    overflow: visible;
+    padding: 8px;
+  }
+
+  .event-tabs button {
+    min-height: 44px;
+    justify-content: center;
+    padding: 8px 10px;
+    white-space: normal;
+  }
+
+  .event-tabs button:last-child {
+    grid-column: 1 / -1;
   }
 
   .event-admin-actions {
