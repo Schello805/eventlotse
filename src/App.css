@@ -2292,6 +2292,34 @@ form {
   }
 }
 
+@media (pointer: coarse) {
+  .task-drag-handle {
+    display: none;
+  }
+
+  .mobile-status-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .mobile-status-buttons button {
+    min-height: 42px;
+    padding: 7px 6px;
+    border: 1px solid #cfd7e3;
+    border-radius: 7px;
+    background: white;
+    color: #415066;
+    font-weight: 800;
+  }
+
+  .mobile-status-buttons button.active {
+    border-color: #0f766e;
+    background: #e7f4f1;
+    color: #0f766e;
+  }
+}
+
 @media print {
   .topbar,
   .footer,

@@ -2083,7 +2083,7 @@ function EventWorkspace({
           <span className={`save-state ${saveState}`}>{saveStateLabel(saveState)}</span>
         </div>
         <div className="hero-stats" aria-label="Event Kennzahlen">
-          <Stat icon={<Users />} label="Gäste" value={String(event.guests)} />
+          <Stat icon={<Users />} label="Gäste geplant" value={String(event.guests)} />
           <Stat icon={<MapPin />} label="Ort" value={event.location || 'offen'} />
           <Stat icon={<ShieldCheck />} label="Rolle" value={session.role} />
         </div>
@@ -2837,6 +2837,16 @@ function ActionBoard({
 }) {
   const today = new Date().toISOString().slice(0, 10)
   const [taskDraft, setTaskDraft] = useState({ what: '', ownerId: '', due: action.deadline || '', doneWhen: '' })
+  const [usesTouchPointer, setUsesTouchPointer] = useState(false)
+
+  useEffect(() => {
+    const media = window.matchMedia('(pointer: coarse)')
+    const updatePointerMode = () => setUsesTouchPointer(media.matches)
+    updatePointerMode()
+    media.addEventListener('change', updatePointerMode)
+    return () => media.removeEventListener('change', updatePointerMode)
+  }, [])
+
   const taskMatchesFilter = (task: Task) => {
     if (taskFilter === 'open') return task.status !== 'done'
     if (taskFilter === 'overdue') return task.status !== 'done' && Boolean(task.due) && task.due < today
@@ -2955,10 +2965,10 @@ function ActionBoard({
                 id={`task-${task.id}`}
                 key={task.id}
               >
-                {canEdit && (
+                {canEdit && !usesTouchPointer && (
                   <div
                     className="task-drag-handle"
-                    draggable
+                    draggable={!usesTouchPointer}
                     onDragStart={(event) => event.dataTransfer.setData('text/plain', task.id)}
                     title="Aufgabe greifen und in eine andere Spalte ziehen"
                   >

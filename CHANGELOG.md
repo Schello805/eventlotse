@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.36
+
+- Drag-&-Drop auf Touch-Geräten zusätzlich per Pointer-Erkennung deaktiviert, auch auf Tablets mit großem Viewport.
+- Header-Beschriftung zu „Gäste geplant“ geändert, damit klar ist: Das ist die geschätzte Gästezahl, nicht die Teamgröße.
+
 ## v0.4.35
 
 - Native Drag-Leiste auf Smartphones ausgeblendet, damit mobile Browser keine Task-ID als Suchtext öffnen.
