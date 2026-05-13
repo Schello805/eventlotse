@@ -6,7 +6,7 @@ Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.24` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.4.25` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
@@ -15,8 +15,8 @@ Rev. `v0.4.24` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 - kompakter Steckbrief-Kopf mit nahem Hilfe-Icon und platzsparendem Export-Dropdown
 - Aktionskatalog mit typischen Event-Bausteinen wie Aufbau, Abbau, Musik, Flyer, Einladungen, Technik, Catering und GEMA
 - Event-Templates für wiederkehrende Abläufe wie Hochzeit, Tanzevent oder Vereinsfest, inklusive JSON-Import und JSON-Export im Adminbereich
-- eigene Infrastruktur-Ansicht, editierbarer Zeitplan und SMART-orientierte Aufgabenfelder mit Bemerkungen
-- Aktionskarten mit Kanban-Unteraufgaben, Status, Verantwortlichen, Deadline und Datei-Merkliste
+- eigene Infrastruktur-Ansicht mit automatisch erzeugten Aufgabenpaketen, editierbarer Zeitplan und SMART-orientierte Aufgabenfelder mit Bemerkungen
+- Aktionskarten mit Kanban-Unteraufgaben, Drag-Leiste, Status, Verantwortlichen, Deadline und Datei-Merkliste
 - klare Aufgaben-Akkordeons, bei denen immer nur ein Arbeitsbereich geöffnet ist
 - eventbezogene Teamverwaltung per E-Mail, Name, Funktion/Kommentar und Entfernen aus dem Event
 - Account-Datenexport im Profil und Selbstlöschung für Helfer

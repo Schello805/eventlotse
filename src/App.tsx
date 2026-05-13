@@ -22,6 +22,7 @@ import {
   Download,
   Euro,
   FileText,
+  GripVertical,
   KanbanSquare,
   LayoutDashboard,
   Lock,
@@ -276,6 +277,65 @@ const infrastructureOptions = [
   'Sanitär',
   'Parken',
 ]
+
+const infrastructureTaskTemplates: Record<string, string[]> = {
+  'PA-Anlage': [
+    'Strombedarf und Anschlüsse klären',
+    'Anzahl Lautsprecher festlegen',
+    'Anzahl Mikrofone und Stative festlegen',
+    'Mischpult, Kabel und Adapter prüfen',
+    'Transport, Aufbau, Soundcheck und Abbau einteilen',
+  ],
+  Licht: [
+    'Benötigte Lichtstimmung festlegen',
+    'Lichtanlage, Stative und Strom planen',
+    'Aufbaupositionen und Kabelwege klären',
+    'Bedienung während des Events festlegen',
+    'Abbau und Rückgabe organisieren',
+  ],
+  Biertische: [
+    'Anzahl Biertische und Bänke berechnen',
+    'Transportfahrzeug und Abholzeit klären',
+    'Aufbauplan für Sitzbereiche erstellen',
+    'Rückgabe und Reinigung organisieren',
+  ],
+  Bar: [
+    'Barfläche und Ausstattung festlegen',
+    'Getränke, Kühlung und Gläser planen',
+    'Kasse, Wechselgeld und Pfand klären',
+    'Bar-Schichten einteilen',
+  ],
+  Stromplan: [
+    'Stromquellen und Sicherungen prüfen',
+    'Kabelwege und Stolperstellen planen',
+    'Mehrfachstecker und Verlängerungen organisieren',
+    'Notfallkontakt für Stromausfall festlegen',
+  ],
+  GEMA: [
+    'Musiknutzung prüfen',
+    'GEMA-Anmeldung vorbereiten',
+    'Setlist oder Musikprogramm dokumentieren',
+    'Gebühren und Zahlungsfrist prüfen',
+  ],
+  Ausschank: [
+    'Ausschankgenehmigung prüfen',
+    'Jugendschutz und Verantwortliche festlegen',
+    'Getränkeliste und Preise abstimmen',
+    'Hygiene und Reinigung klären',
+  ],
+  Sanitär: [
+    'Sanitärbedarf nach Gästezahl prüfen',
+    'Toilettenstandort und Beschilderung planen',
+    'Reinigung und Verbrauchsmaterial organisieren',
+    'Barrierefreiheit prüfen',
+  ],
+  Parken: [
+    'Parkflächen und Zufahrt prüfen',
+    'Beschilderung und Einweiser planen',
+    'Anwohner- oder Rettungswege freihalten',
+    'Parkhinweise an Gäste kommunizieren',
+  ],
+}
 
 const defaultSettings: AppSettings = {
   baseUrl: 'https://eventlotse.example.org',
@@ -1617,6 +1677,61 @@ function EventWorkspace({
     deleteEvent(event.id)
   }
 
+  const infrastructureActionFor = (item: string) => event.actions.find((action) => action.title === item && action.category === 'Infrastruktur')
+
+  const buildInfrastructureAction = (item: string, ownerId = currentMember?.id || ''): ActionCard => ({
+    id: uid(),
+    title: item,
+    category: 'Infrastruktur',
+    owners: ownerId ? [ownerId] : [],
+    deadline: event.date,
+    notes: `Automatisch aus der Infrastruktur-Checkliste erzeugt. Hauptverantwortliche Person koordiniert die Unteraufgaben.`,
+    tasks: (infrastructureTaskTemplates[item] || [`${item} organisieren`, `${item} Aufbau klären`, `${item} Abbau klären`]).map((title) => ({
+      id: uid(),
+      title,
+      ownerIds: ownerId ? [ownerId] : [],
+      due: event.date,
+      status: 'todo',
+      notes: '',
+      files: [],
+      comments: ['Aus Infrastrukturbedarf angelegt. Verantwortliche und Details nach SMART ergänzen.'],
+    })),
+  })
+
+  const toggleInfrastructure = (item: string, checked: boolean) => {
+    const actionExists = Boolean(infrastructureActionFor(item))
+    const newAction = checked && !actionExists ? buildInfrastructureAction(item) : null
+    updateEvent({
+      ...event,
+      infrastructure: checked
+        ? [...event.infrastructure.filter((entry) => entry !== item), item]
+        : event.infrastructure.filter((entry) => entry !== item),
+      actions: newAction ? [...event.actions, newAction] : event.actions,
+    })
+    if (checked && !actionExists) {
+      setActiveTab('tasks')
+      setOpenActionId(newAction?.id || '')
+      notify(`Aufgabenpaket "${item}" wurde im Aufgaben-Tab angelegt.`)
+    } else if (!checked && actionExists) {
+      notify(`"${item}" ist nicht mehr als Bedarf markiert. Bereits angelegte Aufgaben bleiben erhalten.`)
+    }
+  }
+
+  const updateInfrastructureOwner = (item: string, ownerId: string) => {
+    const existingAction = infrastructureActionFor(item)
+    const nextAction = existingAction
+      ? { ...existingAction, owners: ownerId ? [ownerId] : [] }
+      : buildInfrastructureAction(item, ownerId)
+    updateEvent({
+      ...event,
+      infrastructure: [...event.infrastructure.filter((entry) => entry !== item), item],
+      actions: existingAction
+        ? event.actions.map((action) => (action.id === existingAction.id ? nextAction : action))
+        : [...event.actions, nextAction],
+    })
+    notify(`Hauptverantwortung für "${item}" wurde aktualisiert.`)
+  }
+
   return (
     <section className="event-workspace">
       <Link className="ghost back-button" to="/">Zurück zum Dashboard</Link>
@@ -1851,28 +1966,38 @@ function EventWorkspace({
             </div>
             <div className="info-strip">
               <strong>So nutzt du die Liste:</strong>
-              <span>Alles anhaken, was benötigt wird, danach passende Aufgaben im Aufgaben-Tab anlegen oder Verantwortliche zuweisen.</span>
+              <span>Beim Anhaken legt Eventlotse automatisch ein Aufgabenpaket unter Aufgaben an. Die Hauptverantwortung gilt für die Gruppe; einzelne Unteraufgaben können später abweichend verteilt werden.</span>
             </div>
             <div className="check-grid">
-              {infrastructureOptions.map((item) => (
-                <label key={item}>
-                  <input
-                    type="checkbox"
-                    checked={event.infrastructure.includes(item)}
-                    onChange={() => {
-                      const exists = event.infrastructure.includes(item)
-                      updateEvent({
-                        ...event,
-                        infrastructure: exists
-                          ? event.infrastructure.filter((entry) => entry !== item)
-                          : [...event.infrastructure, item],
-                      })
-                    }}
-                    disabled={!isAdmin}
-                  />
-                  {item}
-                </label>
-              ))}
+              {infrastructureOptions.map((item) => {
+                const selected = event.infrastructure.includes(item)
+                const action = infrastructureActionFor(item)
+                return (
+                  <div className={selected ? 'infrastructure-item selected' : 'infrastructure-item'} key={item}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={(change) => toggleInfrastructure(item, change.target.checked)}
+                        disabled={!isAdmin}
+                      />
+                      <span>
+                        <strong>{item}</strong>
+                        <small>{infrastructureTaskTemplates[item]?.slice(0, 2).join(' · ')}</small>
+                      </span>
+                    </label>
+                    <select
+                      value={action?.owners[0] || ''}
+                      onChange={(change) => updateInfrastructureOwner(item, change.target.value)}
+                      disabled={!isAdmin}
+                      aria-label={`Hauptverantwortung für ${item}`}
+                    >
+                      <option value="">Hauptverantwortung offen</option>
+                      {event.members.map((member) => <option value={member.id} key={member.id}>{member.name || member.email}</option>)}
+                    </select>
+                  </div>
+                )
+              })}
             </div>
           </section>
         </div>
@@ -2418,9 +2543,18 @@ function ActionBoard({
               <div
                 className="task-card"
                 key={task.id}
-                draggable={canEdit}
-                onDragStart={(event) => event.dataTransfer.setData('text/plain', task.id)}
               >
+                {canEdit && (
+                  <div
+                    className="task-drag-handle"
+                    draggable
+                    onDragStart={(event) => event.dataTransfer.setData('text/plain', task.id)}
+                    title="Aufgabe greifen und in eine andere Spalte ziehen"
+                  >
+                    <GripVertical size={16} />
+                    <span>Ziehen nach Offen, In Arbeit oder Erledigt</span>
+                  </div>
+                )}
                 <textarea
                   className="task-title-input"
                   value={task.title}

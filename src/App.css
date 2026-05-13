@@ -1227,10 +1227,35 @@ form {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.check-grid label {
+.infrastructure-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #dce6f0;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.infrastructure-item.selected {
+  border-color: #9bd5ca;
+  background: #f1fbf7;
+}
+
+.infrastructure-item label {
   display: flex;
   gap: 7px;
-  align-items: center;
+  align-items: flex-start;
+}
+
+.infrastructure-item label span {
+  display: grid;
+  gap: 3px;
+}
+
+.infrastructure-item small {
+  color: #66758a;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .action-section h2 {
@@ -1370,12 +1395,32 @@ form {
   box-shadow: 0 8px 18px rgba(25, 38, 63, 0.04);
 }
 
-.task-card[draggable="true"] {
-  cursor: grab;
-}
-
 .task-card small {
   color: #627084;
+}
+
+.task-drag-handle {
+  min-height: 34px;
+  padding: 7px 9px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px dashed #b9c7d8;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #52627a;
+  cursor: grab;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.task-drag-handle:active {
+  cursor: grabbing;
+}
+
+.task-drag-handle svg {
+  color: #0f766e;
+  flex: 0 0 auto;
 }
 
 .task-card-actions {
@@ -1979,6 +2024,7 @@ form {
 
   .sidebar,
   .profile-grid,
+  .check-grid,
   .template-grid,
   .kanban,
   .file-list li,

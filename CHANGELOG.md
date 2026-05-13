@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.25
+
+- Infrastruktur-Haken erzeugen automatisch passende Aufgabenpakete im Aufgaben-Tab.
+- Hauptverantwortliche Person pro Infrastrukturgruppe auswählbar.
+- Kanban-Aufgaben haben eine sichtbare Ziehleiste zum Verschieben zwischen den Spalten.
+
 ## v0.4.24
 
 - Hilfe-Icon im Event-Steckbrief direkt an die Überschrift gesetzt.
