@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.27
+
+- Aufgabenbeschreibung in Kanban-Karten deutlich vergrößert.
+- Bearbeitungsfelder in Aufgaben mit mehr Abstand lesbarer gemacht.
+- Upload-Schaltfläche in „Anhang hochladen“ umbenannt.
+- Infrastruktur-Verantwortliche können direkt im Infrastruktur-Tab neu angelegt und zugewiesen werden.
+
 ## v0.4.26
 
 - Normalisierte PostgreSQL-Tabellen für Aktionen, Aufgaben, Infrastruktur, Zeitplan und Budget ergänzt.

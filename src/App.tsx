@@ -1464,6 +1464,7 @@ function EventWorkspace({
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
   const [newMember, setNewMember] = useState({ email: '', name: '', note: '' })
+  const [infrastructureMemberDrafts, setInfrastructureMemberDrafts] = useState<Record<string, { email: string; name: string }>>({})
   const [budgetDraft, setBudgetDraft] = useState({ label: '', amount: '', type: 'expense' as 'income' | 'expense' })
   const [runDraft, setRunDraft] = useState({ time: '', title: '', owner: '' })
   const [wikiDraft, setWikiDraft] = useState('')
@@ -1557,6 +1558,57 @@ function EventWorkspace({
     })
     setNewMember({ email: '', name: '', note: '' })
     notify(`${email} wurde lokal zum Event-Team hinzugefügt. Einladungsmails brauchen den Server.`)
+  }
+
+  const addInfrastructureMember = async (item: string) => {
+    const draft = infrastructureMemberDrafts[item] || { email: '', name: '' }
+    const email = draft.email.trim()
+    if (!email) {
+      notify('Bitte E-Mail-Adresse für die neue verantwortliche Person eintragen.')
+      return
+    }
+    const name = draft.name.trim() || email.split('@')[0]
+    try {
+      const response = await secureFetch(`/api/events/${event.id}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name, note: `Hauptverantwortung: ${item}`, role: 'Helfer' }),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const nextEvent = data.event as EventPlan
+        const member = nextEvent.members.find((entry) => entry.email.toLowerCase() === email.toLowerCase())
+        const existingAction = nextEvent.actions.find((entry) => entry.title === item && entry.category === 'Infrastruktur')
+        const nextAction = existingAction
+          ? { ...existingAction, owners: member ? [member.id] : [] }
+          : buildInfrastructureActionCard(item, nextEvent.date, member?.id || '')
+        updateEvent({
+          ...nextEvent,
+          infrastructure: [...nextEvent.infrastructure.filter((entry) => entry !== item), item],
+          actions: [
+            ...nextEvent.actions.filter((entry) => !(entry.title === item && entry.category === 'Infrastruktur')),
+            nextAction,
+          ],
+        })
+        setInfrastructureMemberDrafts((drafts) => ({ ...drafts, [item]: { email: '', name: '' } }))
+        notify(`${name} wurde eingeladen und für ${item} eingetragen.`)
+        return
+      }
+    } catch {
+      // Fallback für lokale Entwicklung ohne Backend.
+    }
+    const member = { id: uid(), name, email, role: 'Helfer' as Role, note: `Hauptverantwortung: ${item}` }
+    updateEvent({
+      ...event,
+      members: [...event.members, member],
+      infrastructure: [...event.infrastructure.filter((entry) => entry !== item), item],
+      actions: [
+        ...event.actions.filter((entry) => !(entry.title === item && entry.category === 'Infrastruktur')),
+        buildInfrastructureActionCard(item, event.date, member.id),
+      ],
+    })
+    setInfrastructureMemberDrafts((drafts) => ({ ...drafts, [item]: { email: '', name: '' } }))
+    notify(`${name} wurde lokal angelegt und für ${item} eingetragen.`)
   }
 
   const removeMember = async (member: Member) => {
@@ -1986,6 +2038,7 @@ function EventWorkspace({
               {infrastructureOptions.map((item) => {
                 const selected = event.infrastructure.includes(item)
                 const action = infrastructureActionFor(item)
+                const draft = infrastructureMemberDrafts[item] || { email: '', name: '' }
                 return (
                   <div className={selected ? 'infrastructure-item selected' : 'infrastructure-item'} key={item}>
                     <label>
@@ -2009,6 +2062,33 @@ function EventWorkspace({
                       <option value="">Hauptverantwortung offen</option>
                       {event.members.map((member) => <option value={member.id} key={member.id}>{member.name || member.email}</option>)}
                     </select>
+                    {isAdmin && (
+                      <div className="infrastructure-member-add">
+                        <input
+                          value={draft.name}
+                          onChange={(change) =>
+                            setInfrastructureMemberDrafts((drafts) => ({
+                              ...drafts,
+                              [item]: { ...draft, name: change.target.value },
+                            }))
+                          }
+                          placeholder="Neue Person, z.B. Anna"
+                        />
+                        <input
+                          value={draft.email}
+                          onChange={(change) =>
+                            setInfrastructureMemberDrafts((drafts) => ({
+                              ...drafts,
+                              [item]: { ...draft, email: change.target.value },
+                            }))
+                          }
+                          placeholder="E-Mail für neue Person"
+                        />
+                        <button className="ghost" type="button" onClick={() => addInfrastructureMember(item)}>
+                          <Plus size={15} /> Anlegen
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -2623,6 +2703,7 @@ function ActionBoard({
                     <option value="done">Erledigt</option>
                   </select>
                   <textarea
+                    className="task-description-input"
                     value={task.notes}
                     onChange={(change) =>
                       updateAction({
@@ -2667,7 +2748,7 @@ Terminiert: Bis wann?`}
                 )}
                 <label className="file-drop">
                   <Upload size={15} />
-                  <span>{task.files.length ? task.files.join(', ') : 'Datei merken'}</span>
+                  <span>{task.files.length ? task.files.join(', ') : 'Anhang hochladen'}</span>
                   <input
                     type="file"
                     onChange={async (change) => {

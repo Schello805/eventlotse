@@ -264,6 +264,10 @@ textarea {
   line-height: 1.45;
 }
 
+.task-card .task-description-input {
+  min-height: 236px;
+}
+
 .task-card input,
 .task-card select,
 .task-card textarea {
@@ -298,6 +302,12 @@ textarea {
 .task-details {
   display: grid;
   gap: 8px;
+}
+
+.task-details input,
+.task-details select,
+.task-details textarea {
+  margin-bottom: 5px;
 }
 
 .task-details summary {
@@ -1258,6 +1268,18 @@ form {
   line-height: 1.35;
 }
 
+.infrastructure-member-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.infrastructure-member-add .ghost {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
 .action-section h2 {
   margin: 6px 0 12px;
 }
@@ -2033,6 +2055,7 @@ form {
   .step-list,
   .user-create-row,
   .user-row,
+  .infrastructure-member-add,
   .audit-list li {
     grid-template-columns: 1fr;
   }
