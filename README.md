@@ -1,25 +1,28 @@
 # Eventlotse
 
-Eventlotse ist eine selbst hostbare Web-App für private Veranstaltungen: Events anlegen, Mithelfer per E-Mail einladen, Aktionen wie Aufbau, Abbau, Musik, Flyer oder Catering aktivieren und die Arbeit danach in Kanban-Unteraufgaben organisieren.
+Eventlotse ist eine selbst hostbare Web-App für private Veranstaltungen: Events anlegen, Mithelfer per E-Mail einladen, Arbeitsbereiche wie Aufbau, Abbau, Musik, Flyer oder Catering aktivieren und die Arbeit danach in Kanban-Unteraufgaben organisieren.
 
 Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.31` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, feineren Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.4.32` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, feineren Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
 - Login mit Admin- und Helfer-Rollen im Node/PostgreSQL-Backend
 - Event-Übersicht mit Event-Steckbrief, Motto, Zielgruppe, Gästezahl und Ort
 - kompakter Steckbrief-Kopf mit nahem Hilfe-Icon und platzsparendem Export-Dropdown
-- Aktionskatalog mit typischen Event-Bausteinen wie Aufbau, Abbau, Musik, Flyer, Einladungen, Technik, Catering und GEMA
+- Arbeitsbereich-Katalog mit typischen Event-Bausteinen wie Aufbau, Abbau, Musik, Flyer, Einladungen, Technik, Catering und GEMA
 - Event-Templates für wiederkehrende Abläufe wie Hochzeit, Tanzevent oder Vereinsfest, inklusive JSON-Import und JSON-Export im Adminbereich
 - eigene Infrastruktur-Ansicht mit automatisch erzeugten Aufgabenpaketen, editierbarer Zeitplan und SMART-orientierte Aufgabenfelder mit Bemerkungen
-- Aktionskarten mit Kanban-Unteraufgaben, Drag-Leiste, Status, Verantwortlichen, Deadline und Datei-Merkliste
+- Arbeitsbereich-Karten mit Kanban-Unteraufgaben, Drag-Leiste, Status, Verantwortlichen, Deadline und Datei-Merkliste
 - normalisierte PostgreSQL-Tabellen für Aktionen, Aufgaben, Infrastruktur, Zeitplan und Budget als stabile Datenbasis
-- feinere Bearbeitungsrechte: Helfer bearbeiten nur verantwortete Aktionsgruppen oder eigene Unteraufgaben
+- feinere Bearbeitungsrechte: Helfer bearbeiten nur verantwortete Arbeitsbereiche oder eigene Unteraufgaben
 - klare Aufgaben-Akkordeons, bei denen immer nur ein Arbeitsbereich geöffnet ist
+- Setup-Checkliste für Event-Ersteller und reduzierte Helferansicht „Meine Aufgaben“
+- SMART-orientiertes Anlegen neuer Unteraufgaben
+- Aufgaben-Benachrichtigungen per E-Mail mit direktem Link zur Aufgabe
 - eventbezogene Teamverwaltung per E-Mail, Name, Funktion/Kommentar und Entfernen aus dem Event
 - Account-Datenexport im Profil und Selbstlöschung für Helfer
 - hübsche HTML-Einladungsmails mit Eventinfos
@@ -61,7 +64,7 @@ Rev. `v0.4.31` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 
 ## Event-Templates
 
-Admins pflegen globale Vorlagen im Adminbereich unter **Template Store**. Eine Vorlage kann Standard-Aktionen, Unteraufgaben, Infrastruktur-Haken, Zeitplan-Punkte, Budgetposten und Wiki-Notizen enthalten. Beim Anlegen eines Events wählt ein Nutzer optional eine Vorlage aus; Eventlotse füllt das Event danach direkt vor.
+Admins pflegen globale Vorlagen im Adminbereich unter **Template Store**. Eine Vorlage kann Standard-Arbeitsbereiche, Unteraufgaben, Infrastruktur-Haken, Zeitplan-Punkte, Budgetposten und Wiki-Notizen enthalten. Beim Anlegen eines Events wählt ein Nutzer optional eine Vorlage aus; Eventlotse füllt das Event danach direkt vor.
 
 Vorlagen lassen sich als JSON exportieren und wieder importieren. Dadurch kannst du dir eigene wiederkehrende Eventtypen bauen, zum Beispiel einen Tanzabend für deine Frau, und dieselbe Vorlage später erneut verwenden oder mit anderen Eventlotse-Installationen teilen.
 

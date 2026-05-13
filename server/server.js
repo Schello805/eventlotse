@@ -18,7 +18,7 @@ import { encryptSecret } from './crypto-box.js'
 import { canHelperUpdateEvent } from './event-permissions.js'
 import { syncNormalizedEvent } from './event-store.js'
 import { pool, query, transaction } from './db.js'
-import { createTransport, emailChangeMail, invitationMail, passwordResetMail, reminderMail, testMail } from './mail.js'
+import { createTransport, emailChangeMail, invitationMail, passwordResetMail, reminderMail, taskNotificationMail, testMail } from './mail.js'
 import { dueTasksForEvent } from './reminders.js'
 import { mergeAppSettings, normalizeEventTemplates, sanitizeAppSettings } from './settings.js'
 import { hasExecutableSignature, isBlockedUpload } from './upload-security.js'
@@ -242,6 +242,59 @@ function formatGermanDate(date) {
 
 function csvCell(value) {
   return `"${String(value || '').replaceAll('"', '""')}"`
+}
+
+function taskRows(event) {
+  return (event.actions || []).flatMap((action) =>
+    (action.tasks || []).map((task) => ({ action, task })),
+  )
+}
+
+function memberEmailById(event, memberId) {
+  return (event.members || []).find((member) => member.id === memberId)?.email
+}
+
+function taskUrl(baseUrl, eventId, taskId) {
+  return `${baseUrl}/events/${eventId}#task-${taskId}`
+}
+
+async function sendTaskChangeNotifications({ actor, beforeEvent, afterEvent }) {
+  const beforeTasks = new Map(taskRows(beforeEvent).map(({ action, task }) => [task.id, { action, task }]))
+  const transport = await createTransport()
+  const settings = mergeAppSettings(await loadStoredSettings())
+  const sentKeys = new Set()
+
+  for (const { action, task } of taskRows(afterEvent)) {
+    const before = beforeTasks.get(task.id)
+    const ownerIds = task.ownerIds || []
+    const previousOwnerIds = before?.task.ownerIds || []
+    const newlyAssigned = ownerIds.filter((ownerId) => !previousOwnerIds.includes(ownerId))
+    const reasons = []
+    for (const ownerId of newlyAssigned) reasons.push({ ownerId, text: `Neue Aufgabe zugewiesen: ${task.title}` })
+    if (before && before.task.status !== task.status) {
+      for (const ownerId of ownerIds) reasons.push({ ownerId, text: `Status geändert: ${task.title}` })
+    }
+    if (before && JSON.stringify(before.task.files || []) !== JSON.stringify(task.files || [])) {
+      for (const ownerId of ownerIds) reasons.push({ ownerId, text: `Anhang geändert: ${task.title}` })
+    }
+
+    for (const reason of reasons) {
+      const to = memberEmailById(afterEvent, reason.ownerId)
+      if (!to || to === actor?.email) continue
+      const key = `${to}:${task.id}:${reason.text}`
+      if (sentKeys.has(key)) continue
+      sentKeys.add(key)
+      await transport.sendMail(await taskNotificationMail({
+        to,
+        event: afterEvent,
+        task,
+        actionTitle: action.title,
+        taskUrl: taskUrl(settings.baseUrl || config.publicBaseUrl, afterEvent.id, task.id),
+        reason: reason.text,
+      }))
+    }
+  }
+  if (sentKeys.size) await audit(actor, `${sentKeys.size} Aufgaben-Benachrichtigung(en) für "${afterEvent.name}" wurden versendet.`)
 }
 
 async function runDueReminders(actor = null) {
@@ -643,8 +696,9 @@ app.put('/api/events/:eventId', requireAuth, async (request, response) => {
 
   const currentResult = await query('SELECT id, data FROM events WHERE id = $1', [request.params.eventId])
   if (!currentResult.rowCount) return response.status(404).json({ message: 'Event nicht gefunden.' })
+  const currentEvent = eventFromRow(currentResult.rows[0])
   const roleInEvent = await eventRole(request.user, request.params.eventId)
-  if (roleInEvent !== 'Admin' && !canHelperUpdateEvent(eventFromRow(currentResult.rows[0]), request.body, request.user.id)) {
+  if (roleInEvent !== 'Admin' && !canHelperUpdateEvent(currentEvent, request.body, request.user.id)) {
     return response.status(403).json({ message: 'Du darfst nur Aufgaben bearbeiten, für die du verantwortlich bist.' })
   }
 
@@ -657,8 +711,12 @@ app.put('/api/events/:eventId', requireAuth, async (request, response) => {
     return updated
   })
   if (!result.rowCount) return response.status(404).json({ message: 'Event nicht gefunden.' })
+  const updatedEvent = eventFromRow(result.rows[0])
   await audit(request.user, `Event "${request.body.name}" wurde aktualisiert.`)
-  response.json({ event: eventFromRow(result.rows[0]) })
+  sendTaskChangeNotifications({ actor: request.user, beforeEvent: currentEvent, afterEvent: updatedEvent }).catch((error) => {
+    console.error('[Eventlotse] Aufgaben-Benachrichtigung fehlgeschlagen:', error)
+  })
+  response.json({ event: updatedEvent })
 })
 
 app.delete('/api/events/:eventId', requireAuth, async (request, response) => {

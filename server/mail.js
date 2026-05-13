@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer'
+import { config } from './config.js'
 import { query } from './db.js'
 import { mailSettingsFromAppSettings, mergeAppSettings } from './settings.js'
 
@@ -168,6 +169,27 @@ export async function reminderMail({ to, event, tasks }) {
         label: `${task.title} (${task.due || 'ohne Datum'})`,
         value: task.notes || 'Bitte Status prüfen und bei Bedarf aktualisieren.',
       })),
+    }),
+  }
+}
+
+export async function taskNotificationMail({ to, event, task, actionTitle, taskUrl, reason }) {
+  const settings = await getMailSettings()
+  return {
+    from: settings.from,
+    to,
+    subject: `Eventlotse: ${reason} in "${event.name}"`,
+    html: baseTemplate({
+      title: reason,
+      intro: `Es gibt eine Aktualisierung bei "${event.name}".`,
+      buttonUrl: taskUrl,
+      buttonLabel: 'Aufgabe öffnen',
+      sections: [
+        { label: 'Arbeitsbereich', value: actionTitle },
+        { label: 'Aufgabe', value: task.title },
+        { label: 'Fällig', value: task.due || 'ohne Datum' },
+        { label: 'Status', value: task.status || 'offen' },
+      ],
     }),
   }
 }

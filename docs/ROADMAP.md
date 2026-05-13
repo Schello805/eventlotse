@@ -37,3 +37,4 @@
 - normalisierte Tabellen für Aufgaben, Zeitplan, Budget und Team statt großem Event-JSON
 - optionale Zwei-Faktor-Anmeldung für Admins
 - feinere Rechte pro Aufgabenkarte
+- Template-Workflow ausbauen: Vorlage beim Event-Erstellen prominenter machen und nach Anpassungen direkt „Als eigene Vorlage speichern“ anbieten

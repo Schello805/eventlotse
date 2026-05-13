@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.32
+
+- Startassistent im Event zu einer vollständigen Setup-Checkliste erweitert.
+- Event-Ersteller werden nach dem Anlegen direkt ins neue Event geführt.
+- „Aktionen“ in der Oberfläche zu verständlicheren „Arbeitsbereichen“ umbenannt.
+- Helfer starten im Event mit einer reduzierten Ansicht „Meine Aufgaben“.
+- Unteraufgaben können per SMART-orientierter Eingabe angelegt werden.
+- Benachrichtigungen zeigen relevante offene Punkte und führen direkt in den passenden Arbeitsbereich.
+- E-Mail-Benachrichtigungen für neue Zuweisungen, Statusänderungen und geänderte Anhänge mit direktem Aufgabenlink ergänzt.
+- Template-Workflow-Ausbau in der Roadmap vorgemerkt.
+
 ## v0.4.31
 
 - Profilbereich kann eine E-Mail-Änderung anfordern.

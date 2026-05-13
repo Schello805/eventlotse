@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -526,6 +526,7 @@ function loadEvents() {
 }
 
 function App() {
+  const navigate = useNavigate()
   const [events, setEvents] = useLocalStorage<EventPlan[]>(storageKey, loadEvents())
   const [settings, setSettings] = useLocalStorage<AppSettings>(settingsStorageKey, defaultSettings)
   const [eventTemplates, setEventTemplates] = useLocalStorage<EventTemplate[]>(templateStorageKey, builtInEventTemplates)
@@ -695,7 +696,8 @@ function App() {
     }
     setEvents((current) => [next, ...current])
     addAudit(`Event "${next.name}" wurde angelegt.`)
-    notify(`Event "${next.name}" wurde angelegt.`)
+    notify(`Event "${next.name}" wurde angelegt. Als Nächstes Team oder Infrastruktur ergänzen.`)
+    navigate(`/events/${next.id}`)
     secureFetch('/api/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -705,6 +707,7 @@ function App() {
       .then((data) => {
         if (data?.event) {
           setEvents((current) => current.map((event) => (event.id === next.id ? normalizeEvent(data.event) : event)))
+          navigate(`/events/${data.event.id}`)
         }
       })
       .catch(() => undefined)
@@ -1505,16 +1508,12 @@ function NextSteps({
   setActiveTab: (tab: EventTab) => void
 }) {
   const openTasks = event.actions.flatMap((action) => action.tasks).filter((task) => task.status !== 'done').length
+  const assignedTasks = event.actions.flatMap((action) => action.tasks).filter((task) => task.ownerIds.length > 0).length
   const steps = [
     {
-      done: Boolean(event.date && event.location),
-      label: event.date && event.location ? 'Datum und Ort sind gesetzt.' : 'Datum und Ort ergänzen.',
+      done: Boolean(event.date && event.location && event.motto),
+      label: event.date && event.location && event.motto ? 'Grunddaten sind vollständig.' : 'Grunddaten im Steckbrief ergänzen.',
       tab: 'overview' as EventTab,
-    },
-    {
-      done: event.actions.length > 0,
-      label: event.actions.length > 0 ? `${event.actions.length} Arbeitsbereich(e) angelegt.` : 'Ein bis zwei passende Aktionen auswählen.',
-      tab: 'tasks' as EventTab,
     },
     {
       done: event.members.length > 1,
@@ -1522,9 +1521,29 @@ function NextSteps({
       tab: 'team' as EventTab,
     },
     {
-      done: openTasks > 0,
-      label: openTasks > 0 ? `${openTasks} offene Aufgabe(n) sichtbar.` : 'Erste Unteraufgabe anlegen oder vorhandene Aufgabe umbenennen.',
+      done: event.infrastructure.length > 0 || event.actions.some((action) => action.category === 'Infrastruktur'),
+      label: event.infrastructure.length > 0 ? `${event.infrastructure.length} Infrastrukturpunkt(e) gewählt.` : 'Infrastrukturbedarf auswählen.',
+      tab: 'infrastructure' as EventTab,
+    },
+    {
+      done: event.actions.length > 0,
+      label: event.actions.length > 0 ? `${event.actions.length} Arbeitsbereich(e) angelegt.` : 'Ein bis zwei Arbeitsbereiche auswählen.',
       tab: 'tasks' as EventTab,
+    },
+    {
+      done: openTasks > 0 && assignedTasks > 0,
+      label: assignedTasks > 0 ? `${assignedTasks} Aufgabe(n) verteilt.` : 'Aufgaben Verantwortlichen zuweisen.',
+      tab: 'tasks' as EventTab,
+    },
+    {
+      done: event.runsheet.length > 0,
+      label: event.runsheet.length > 0 ? `${event.runsheet.length} Zeitplanpunkt(e) angelegt.` : 'Zeitplan für den Veranstaltungstag anlegen.',
+      tab: 'schedule' as EventTab,
+    },
+    {
+      done: Boolean(event.flyerFileId || event.photoUrl),
+      label: event.flyerFileId || event.photoUrl ? 'Flyer oder Fotoalbum ist hinterlegt.' : 'Flyer oder Fotoalbum-Link hinterlegen.',
+      tab: 'overview' as EventTab,
     },
   ]
   const nextOpenStep = steps.find((step) => !step.done)
@@ -1537,11 +1556,11 @@ function NextSteps({
         <strong>{nextOpenStep ? 'Nächster sinnvoller Schritt' : 'Grundsetup sieht gut aus'}</strong>
         <p className="help-text">
           {nextOpenStep
-            ? 'Für kleine Veranstaltungen reichen oft Eventdaten, ein bis zwei Aktionen und eine verantwortliche Person.'
+            ? 'Für kleine Veranstaltungen reichen oft Eventdaten, ein bis zwei Arbeitsbereiche und eine verantwortliche Person.'
             : 'Du kannst jetzt Details ergänzen oder direkt mit Aufgaben arbeiten.'}
         </p>
       </div>
-      <div className="step-list">
+      <div className="step-list setup-checklist">
         {steps.map((step) => (
           <button className={step.done ? 'step-item done' : 'step-item'} key={step.label} onClick={() => setActiveTab(step.tab)} disabled={!isAdmin && !step.done}>
             {step.done ? <CheckCircle2 size={16} /> : <CircleHelp size={16} />}
@@ -1549,6 +1568,56 @@ function NextSteps({
           </button>
         ))}
       </div>
+    </section>
+  )
+}
+
+function MyTasksPanel({
+  tasks,
+  setActiveTab,
+  onOpenTask,
+  updateTask,
+}: {
+  tasks: Array<Task & { actionTitle: string; actionId: string }>
+  setActiveTab: (tab: EventTab) => void
+  onOpenTask: (actionId: string) => void
+  updateTask: (actionId: string, taskId: string, patch: Partial<Task>) => void
+}) {
+  const openTasks = tasks.filter((task) => task.status !== 'done')
+
+  return (
+    <section className="panel helper-focus-panel">
+      <div className="section-head">
+        <div>
+          <h2>Meine Aufgaben</h2>
+          <p className="help-text">Kurze Arbeitsansicht für alles, was dir zugewiesen ist.</p>
+        </div>
+        <CheckCircle2 size={18} />
+      </div>
+      {openTasks.length === 0 ? (
+        <EmptyState title="Keine offenen Aufgaben für dich" text="Wenn dir später etwas zugewiesen wird, erscheint es hier automatisch." />
+      ) : (
+        <div className="helper-task-list">
+          {openTasks.map((task) => (
+            <article className={task.due && task.due < new Date().toISOString().slice(0, 10) ? 'helper-task overdue' : 'helper-task'} key={task.id}>
+              <div>
+                <span className="eyebrow">{task.actionTitle}</span>
+                <strong>{task.title}</strong>
+                <small>Fällig: {formatDate(task.due)} · {statusLabel(task.status)}</small>
+              </div>
+              <div className="helper-task-actions">
+                <select value={task.status} onChange={(event) => updateTask(task.actionId, task.id, { status: event.target.value as Status })}>
+                  <option value="todo">Offen</option>
+                  <option value="doing">In Arbeit</option>
+                  <option value="done">Erledigt</option>
+                </select>
+                <button className="ghost" type="button" onClick={() => onOpenTask(task.actionId)}>Details öffnen</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+      <button className="ghost" type="button" onClick={() => setActiveTab('overview')}>Gesamtes Event ansehen</button>
     </section>
   )
 }
@@ -1572,18 +1641,24 @@ function EventWorkspace({
   deleteEvent: (eventId: string) => void
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
+  const location = useLocation()
   const [newMember, setNewMember] = useState({ email: '', name: '', note: '' })
   const [infrastructureMemberDrafts, setInfrastructureMemberDrafts] = useState<Record<string, { email: string; name: string }>>({})
   const [budgetDraft, setBudgetDraft] = useState({ label: '', amount: '', type: 'expense' as 'income' | 'expense' })
   const [runDraft, setRunDraft] = useState({ time: '', title: '', owner: '' })
   const [wikiDraft, setWikiDraft] = useState('')
-  const [activeTab, setActiveTab] = useState<EventTab>('overview')
+  const [activeTab, setActiveTab] = useState<EventTab>(session.role === 'Admin' ? 'overview' : 'tasks')
   const [openActionId, setOpenActionId] = useState('')
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>('all')
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>(session.role === 'Admin' ? 'all' : 'mine')
   const [files, setFiles] = useState<StoredFile[]>([])
-  const isAdmin = session.role === 'Admin'
   const currentMember = event.members.find((member) => member.email === session.email)
+  const isAdmin = session.role === 'Admin' || currentMember?.role === 'Admin'
   const openTaskCount = event.actions.flatMap((action) => action.tasks).filter((task) => task.status !== 'done').length
+  const myTasks = event.actions.flatMap((action) =>
+    action.tasks
+      .filter((task) => currentMember?.id && task.ownerIds.includes(currentMember.id))
+      .map((task) => ({ ...task, actionTitle: action.title, actionId: action.id })),
+  )
   const activeActionId = event.actions.some((action) => action.id === openActionId) ? openActionId : ''
 
   const totals = useMemo(() => {
@@ -1596,12 +1671,56 @@ function EventWorkspace({
     )
   }, [event.budget])
 
+  const eventNotifications = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    const taskItems = event.actions.flatMap((action) =>
+      action.tasks
+        .filter((task) => task.status !== 'done')
+        .map((task) => ({ task, action })),
+    )
+    return [
+      ...taskItems
+        .filter(({ task }) => task.due && task.due < today)
+        .slice(0, 3)
+        .map(({ task, action }) => ({
+          id: `overdue-${task.id}`,
+          label: `Überfällig: ${task.title}`,
+          actionId: action.id,
+          icon: <Bell size={15} />,
+        })),
+      ...taskItems
+        .filter(({ task }) => task.ownerIds.length === 0)
+        .slice(0, 3)
+        .map(({ task, action }) => ({
+          id: `unassigned-${task.id}`,
+          label: `Ohne Verantwortliche: ${task.title}`,
+          actionId: action.id,
+          icon: <Users size={15} />,
+        })),
+      ...(event.runsheet.length === 0 ? [{ id: 'schedule-empty', label: 'Zeitplan ist noch leer.', tab: 'schedule' as EventTab, icon: <Clock3 size={15} /> }] : []),
+      ...(event.flyerFileId ? [] : [{ id: 'flyer-empty', label: 'Flyer ist noch nicht hinterlegt.', tab: 'overview' as EventTab, icon: <FileText size={15} /> }]),
+    ].slice(0, 6)
+  }, [event])
+
   useEffect(() => {
     fetch(`/api/events/${event.id}/files`, { credentials: 'include' })
       .then((response) => (response.ok ? response.json() : { files: [] }))
       .then((data) => setFiles(data.files || []))
       .catch(() => setFiles([]))
   }, [event.id])
+
+  useEffect(() => {
+    const taskId = location.hash.startsWith('#task-') ? location.hash.replace('#task-', '') : ''
+    if (!taskId) return
+    const action = event.actions.find((entry) => entry.tasks.some((task) => task.id === taskId))
+    if (!action) return
+    window.requestAnimationFrame(() => {
+      setActiveTab('tasks')
+      setTaskFilter('all')
+      setOpenActionId(action.id)
+      window.requestAnimationFrame(() => document.getElementById(`task-${taskId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+    })
+  }, [event.actions, location.hash])
 
   const addAction = (title: string, category: string) => {
     if (event.actions.some((action) => action.title === title)) return
@@ -1630,11 +1749,25 @@ function EventWorkspace({
       actions: [...event.actions, nextAction],
     })
     setOpenActionId(nextAction.id)
-    notify(`Aktion "${title}" wurde hinzugefügt.`)
+    notify(`Arbeitsbereich "${title}" wurde hinzugefügt.`)
   }
 
   const toggleActionAccordion = (actionId: string) => {
     setOpenActionId((current) => (current === actionId ? '' : actionId))
+  }
+
+  const updateTaskInEvent = (actionId: string, taskId: string, patch: Partial<Task>) => {
+    updateEvent({
+      ...event,
+      actions: event.actions.map((action) =>
+        action.id === actionId
+          ? {
+              ...action,
+              tasks: action.tasks.map((task) => (task.id === taskId ? { ...task, ...patch } : task)),
+            }
+          : action,
+      ),
+    })
   }
 
   const addMember = async () => {
@@ -2063,11 +2196,29 @@ function EventWorkspace({
           <section className="panel">
             <div className="section-head">
               <h2>Benachrichtigungen</h2>
-              <HelpHint text="Noch lokale Hinweise. E-Mail- und Push-Erinnerungen werden mit Backend/SMTP aktiviert." />
+              <HelpHint text="Hinweise zu offenen Punkten. Aufgabenhinweise führen direkt in den passenden Arbeitsbereich." />
             </div>
             <ul className="notification-list">
-              <li><Bell size={15} /> Flyer-Druck 14 Tage vor Event prüfen.</li>
-              <li><Clock3 size={15} /> {event.runsheet.length} Punkte im Zeitplan.</li>
+              {eventNotifications.length === 0 ? (
+                <li><CheckCircle2 size={15} /> Keine dringenden Hinweise.</li>
+              ) : eventNotifications.map((item) => (
+                <li key={item.id}>
+                  {item.icon}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if ('actionId' in item) {
+                        setActiveTab('tasks')
+                        setOpenActionId(item.actionId)
+                      } else if ('tab' in item) {
+                        setActiveTab(item.tab)
+                      }
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                </li>
+              ))}
             </ul>
           </section>
         </div>
@@ -2077,10 +2228,10 @@ function EventWorkspace({
         <section className="action-section">
           <details className="panel accordion-panel" open={event.actions.length === 0}>
             <summary className="action-picker-summary">
-              <span><Plus size={17} /> Aktionen hinzufügen</span>
+              <span><Plus size={17} /> Arbeitsbereiche hinzufügen</span>
               <small>Aufklappen und passende Arbeitsbereiche auswählen</small>
             </summary>
-            <p className="help-text">Aktionen sind große Arbeitsbereiche wie Aufbau, Musik oder Catering. Du aktivierst nur, was dieses Event wirklich braucht.</p>
+            <p className="help-text">Arbeitsbereiche sind große Themen wie Aufbau, Musik oder Catering. Du aktivierst nur, was dieses Event wirklich braucht.</p>
             <div className="template-grid">
               {actionTemplates.map(({ title, category, help }) => {
                 const active = event.actions.some((action) => action.title === title)
@@ -2098,11 +2249,22 @@ function EventWorkspace({
 
           {event.actions.length === 0 ? (
             <EmptyState
-              title="Noch keine Aktionen"
-              text="Wähle oben passende Aktionskarten aus. Danach entsteht hier dein Aufgaben-Dashboard."
+              title="Noch keine Arbeitsbereiche"
+              text="Wähle oben passende Arbeitsbereiche aus. Danach entsteht hier dein Aufgaben-Dashboard."
             />
           ) : (
             <>
+              {!isAdmin && (
+                <MyTasksPanel
+                  tasks={myTasks}
+                  setActiveTab={setActiveTab}
+                  onOpenTask={(actionId) => {
+                    setTaskFilter('mine')
+                    setOpenActionId(actionId)
+                  }}
+                  updateTask={updateTaskInEvent}
+                />
+              )}
               <div className="task-filter-bar" aria-label="Aufgabenfilter">
                 {([
                   ['all', 'Alle'],
@@ -2722,6 +2884,7 @@ function ActionBoard({
   updateAction: (action: ActionCard) => void
 }) {
   const today = new Date().toISOString().slice(0, 10)
+  const [taskDraft, setTaskDraft] = useState({ what: '', ownerId: '', due: action.deadline || '', doneWhen: '' })
   const taskMatchesFilter = (task: Task) => {
     if (taskFilter === 'open') return task.status !== 'done'
     if (taskFilter === 'overdue') return task.status !== 'done' && Boolean(task.due) && task.due < today
@@ -2730,22 +2893,25 @@ function ActionBoard({
     return true
   }
   const addTask = () => {
+    const title = taskDraft.what.trim() || 'Neue Unteraufgabe'
+    const doneWhen = taskDraft.doneWhen.trim()
     updateAction({
       ...action,
       tasks: [
         ...action.tasks,
         {
           id: uid(),
-          title: 'Neue Unteraufgabe',
-          ownerIds: [],
-          due: action.deadline,
+          title,
+          ownerIds: taskDraft.ownerId ? [taskDraft.ownerId] : [],
+          due: taskDraft.due || action.deadline,
           status: 'todo',
-          notes: '',
+          notes: doneWhen ? `Erledigt, wenn: ${doneWhen}` : '',
           files: [],
           comments: [],
         },
       ],
     })
+    setTaskDraft({ what: '', ownerId: '', due: action.deadline || '', doneWhen: '' })
     notify(`Unteraufgabe in "${action.title}" wurde angelegt.`)
   }
 
@@ -2790,8 +2956,27 @@ function ActionBoard({
           <span className="eyebrow"><KanbanSquare size={14} /> Kanban</span>
           <h3>Unteraufgaben</h3>
         </div>
-        <button className="icon-button" onClick={addTask} disabled={!canEdit} aria-label="Unteraufgabe hinzufügen"><Plus size={18} /></button>
       </div>
+      {canEdit && (
+        <div className="smart-task-create">
+          <input
+            value={taskDraft.what}
+            onChange={(event) => setTaskDraft({ ...taskDraft, what: event.target.value })}
+            placeholder="Was genau ist zu tun?"
+          />
+          <select value={taskDraft.ownerId} onChange={(event) => setTaskDraft({ ...taskDraft, ownerId: event.target.value })}>
+            <option value="">Wer?</option>
+            {members.map((member) => <option value={member.id} key={member.id}>{member.name || member.email}</option>)}
+          </select>
+          <input type="date" value={taskDraft.due} onChange={(event) => setTaskDraft({ ...taskDraft, due: event.target.value })} aria-label="Bis wann?" />
+          <input
+            value={taskDraft.doneWhen}
+            onChange={(event) => setTaskDraft({ ...taskDraft, doneWhen: event.target.value })}
+            placeholder="Woran erkennen wir fertig?"
+          />
+          <button className="primary" onClick={addTask} disabled={!taskDraft.what.trim()} type="button"><Plus size={16} /> Aufgabe anlegen</button>
+        </div>
+      )}
       <div className="kanban">
         {(['todo', 'doing', 'done'] as Status[]).map((status) => (
           <div
@@ -2814,7 +2999,8 @@ function ActionBoard({
             )}
             {action.tasks.filter((task) => task.status === status && taskMatchesFilter(task)).map((task) => (
               <div
-                className="task-card"
+                className={task.status !== 'done' && task.due && task.due < today ? 'task-card overdue' : 'task-card'}
+                id={`task-${task.id}`}
                 key={task.id}
               >
                 {canEdit && (
@@ -2844,6 +3030,7 @@ function ActionBoard({
                 <div className="task-meta-row">
                   <small>Fällig: {formatDate(task.due)}</small>
                   <small>{members.find((member) => member.id === task.ownerIds[0])?.name || 'ohne Verantwortliche'}</small>
+                  {task.status !== 'done' && task.due && task.due < today && <small className="danger-chip">Überfällig</small>}
                 </div>
                 <details className="task-details">
                   <summary>Details bearbeiten</summary>
