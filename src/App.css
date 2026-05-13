@@ -1806,6 +1806,33 @@ form {
   margin-bottom: 12px;
 }
 
+.template-guide {
+  margin: 10px 0 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.template-guide div {
+  padding: 12px;
+  border: 1px solid #cfe8df;
+  border-radius: 8px;
+  background: #f2fbf7;
+}
+
+.template-guide strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #0f766e;
+}
+
+.template-guide span {
+  display: block;
+  color: #415066;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .file-import-button {
   cursor: pointer;
 }
@@ -2074,6 +2101,10 @@ form {
   }
 
   .template-card {
+    grid-template-columns: 1fr;
+  }
+
+  .template-guide {
     grid-template-columns: 1fr;
   }
 

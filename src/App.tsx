@@ -886,7 +886,10 @@ function Dashboard({
                   <option value={template.id} key={template.id}>{template.name}</option>
                 ))}
               </select>
-              <small className="help-text">Optional. Eine Vorlage füllt Aufgaben, Infrastruktur, Budget und Ablauf automatisch vor.</small>
+              <small className="help-text">
+                Optional. Die Vorlage wird nur beim Erstellen kopiert: Arbeitsbereiche, Unteraufgaben, Infrastruktur, Zeitplan, Budget und Wiki starten vorbefüllt.
+                Spätere Änderungen am Event ändern die Vorlage nicht automatisch.
+              </small>
             </label>
             <label className="field">
               <span>Eventname</span>
@@ -1918,10 +1921,10 @@ function EventWorkspace({
       }
       const data = await response.json()
       setTemplates(normalizeTemplates(data.templates || nextTemplates))
-      notify('Event wurde als Vorlage gespeichert.')
+      notify('Event wurde als neue Vorlage gespeichert. Sie ist beim nächsten Event-Erstellen auswählbar.')
     } catch (error) {
       setTemplates(nextTemplates)
-      notify(error instanceof Error ? error.message : 'Vorlage wurde lokal gespeichert.')
+      notify(error instanceof Error ? error.message : 'Vorlage wurde lokal gespeichert und ist beim nächsten Event-Erstellen auswählbar.')
     }
   }
 
@@ -2129,7 +2132,16 @@ function EventWorkspace({
                     <button type="button" onClick={exportJson}><Download size={16} /> Event als JSON</button>
                   </div>
                 </details>
-                {isAdmin && <button className="ghost" type="button" onClick={saveEventAsTemplate}><Save size={16} /> Als Vorlage speichern</button>}
+                {isAdmin && (
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={saveEventAsTemplate}
+                    title="Speichert Motto, Zielgruppe, Gästezahl, Arbeitsbereiche, Unteraufgaben, Infrastruktur, Zeitplan, Budget und Wiki als neue Vorlage. Team, Dateien, Kommentare, Fotos und konkrete Verantwortliche werden nicht übernommen."
+                  >
+                    <Save size={16} /> Als Vorlage speichern
+                  </button>
+                )}
               </div>
             </div>
             <div className="profile-grid">
@@ -2608,7 +2620,7 @@ function AdminPage({
 
   const editTemplateAsJson = (template: EventTemplate) => {
     setTemplateJson(JSON.stringify(template, null, 2))
-    notify(`Vorlage "${template.name}" liegt unten als JSON zum Bearbeiten bereit.`)
+    notify(`Vorlage "${template.name}" liegt unten als JSON bereit. Speichern übernimmt die Änderung in den Template Store.`)
   }
 
   const saveTemplateJson = () => {
@@ -2643,7 +2655,7 @@ function AdminPage({
     if (!file) return
     try {
       setTemplateJson(await file.text())
-      notify('Template-Datei geladen. Prüfe den JSON-Text und speichere ihn danach.')
+      notify('Vorlagen-Datei geladen. Prüfe den JSON-Text und speichere ihn danach.')
     } catch {
       notify('Template-Datei konnte nicht gelesen werden.')
     }
@@ -2739,9 +2751,23 @@ function AdminPage({
           <div className="section-head">
             <div>
               <h2>Template Store</h2>
-              <p className="help-text">Vorlagen sind global: Admins pflegen sie hier, alle angemeldeten Nutzer können sie beim Event-Erstellen auswählen.</p>
+              <p className="help-text">Vorlagen sind globale Startpakete. Admins pflegen sie hier, alle angemeldeten Nutzer können sie beim Event-Erstellen auswählen.</p>
             </div>
             <ClipboardList size={18} />
+          </div>
+          <div className="template-guide" aria-label="So funktionieren Event-Vorlagen">
+            <div>
+              <strong>1. Vorlage pflegen</strong>
+              <span>Hier landen Standard-Aktionen, Unteraufgaben, Infrastruktur, Zeitplan, Budget und Wiki-Notizen.</span>
+            </div>
+            <div>
+              <strong>2. Beim Event auswählen</strong>
+              <span>Beim Erstellen wird der Inhalt einmalig in das neue Event kopiert und kann dort frei angepasst werden.</span>
+            </div>
+            <div>
+              <strong>3. Wiederverwenden</strong>
+              <span>Änderungen im Event ändern die Vorlage erst, wenn du das Event bewusst wieder als neue Vorlage speicherst.</span>
+            </div>
           </div>
           <div className="template-toolbar">
             <button className="ghost" type="button" onClick={() => exportTemplates(templates)}><Download size={16} /> Alle exportieren</button>
@@ -2757,11 +2783,13 @@ function AdminPage({
                 <div>
                   <strong>{template.name}</strong>
                   <p>{template.description || 'Keine Beschreibung hinterlegt.'}</p>
-                  <small>{template.actions.length} Aktionen · {template.runsheet.length} Ablaufpunkte · {template.budget.length} Budgetposten</small>
+                  <small>
+                    Enthält: {template.actions.length} Aktionen · {template.infrastructure.length} Infrastrukturpunkte · {template.runsheet.length} Zeitplanpunkte · {template.budget.length} Budgetposten
+                  </small>
                 </div>
                 <div className="template-actions">
-                  <button className="ghost" type="button" onClick={() => editTemplateAsJson(template)}><FileText size={15} /> JSON</button>
-                  <button className="ghost" type="button" onClick={() => exportTemplates([template])}><Download size={15} /> Export</button>
+                  <button className="ghost" type="button" onClick={() => editTemplateAsJson(template)} title="Lädt diese Vorlage unten in das JSON-Feld. Erst mit „JSON speichern“ wird sie geändert."><FileText size={15} /> JSON bearbeiten</button>
+                  <button className="ghost" type="button" onClick={() => exportTemplates([template])} title="Speichert nur diese Vorlage als JSON-Datei, damit du sie sichern oder in einer anderen Installation importieren kannst."><Download size={15} /> Export</button>
                   <button className="icon-button danger" type="button" onClick={() => saveTemplates(templates.filter((entry) => entry.id !== template.id), `Vorlage "${template.name}" wurde gelöscht.`)} aria-label={`${template.name} löschen`}>
                     <Trash2 size={16} />
                   </button>
@@ -2787,7 +2815,10 @@ function AdminPage({
   "wiki": ["Standard-Aufbauplan nutzen"]
 }`}
             />
-            <small className="help-text">Du kannst eine einzelne Vorlage oder eine Liste von Vorlagen einfügen. Gleiche IDs werden aktualisiert.</small>
+            <small className="help-text">
+              Eine JSON-Datei kann eine einzelne Vorlage oder eine Liste enthalten. Gleiche IDs werden aktualisiert, neue IDs werden ergänzt.
+              Nicht gespeichert werden Teammitglieder, Anhänge, Kommentare, Fotos und persönliche Verantwortlichkeiten aus einem konkreten Event.
+            </small>
           </label>
           <button className="primary" type="button" onClick={saveTemplateJson} disabled={!templateJson.trim()}><Save size={16} /> JSON speichern</button>
         </section>

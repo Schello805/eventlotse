@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.39
+
+- Template Store mit klarer Schritt-für-Schritt-Erklärung ergänzt.
+- Hinweise beim Event-Erstellen präzisiert: Vorlagen werden einmalig kopiert und bleiben danach unabhängig.
+- JSON-Import, JSON-Bearbeitung, Export und „Als Vorlage speichern“ verständlicher kommentiert.
+
 ## v0.4.38
 
 - Header-Kennzahl „Gäste geplant“ zu „Gäste“ zurückbenannt.
