@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.29
+
+- Aufgaben-Akkordeons können jetzt vollständig zugeklappt werden.
+- Button „Alle zuklappen“ im Aufgabenfilter ergänzt.
+
 ## v0.4.28
 
 - Aufgaben-Detailfelder klar beschriftet, damit SMART-Beschreibung und optionale Bemerkung nicht mehr wie doppelte Kommentarfelder wirken.

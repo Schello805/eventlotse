@@ -1475,7 +1475,7 @@ function EventWorkspace({
   const isAdmin = session.role === 'Admin'
   const currentMember = event.members.find((member) => member.email === session.email)
   const openTaskCount = event.actions.flatMap((action) => action.tasks).filter((task) => task.status !== 'done').length
-  const activeActionId = event.actions.some((action) => action.id === openActionId) ? openActionId : event.actions[0]?.id || ''
+  const activeActionId = event.actions.some((action) => action.id === openActionId) ? openActionId : ''
 
   const totals = useMemo(() => {
     return event.budget.reduce(
@@ -1522,6 +1522,10 @@ function EventWorkspace({
     })
     setOpenActionId(nextAction.id)
     notify(`Aktion "${title}" wurde hinzugefügt.`)
+  }
+
+  const toggleActionAccordion = (actionId: string) => {
+    setOpenActionId((current) => (current === actionId ? '' : actionId))
   }
 
   const addMember = async () => {
@@ -1944,11 +1948,14 @@ function EventWorkspace({
                     {label}
                   </button>
                 ))}
+                <button className="ghost" type="button" onClick={() => setOpenActionId('')} disabled={!activeActionId}>
+                  Alle zuklappen
+                </button>
               </div>
               <div className="action-stack">
                 {event.actions.map((action) => (
                   <section className={activeActionId === action.id ? 'action-accordion open' : 'action-accordion'} key={action.id}>
-                    <button className="action-accordion-head" type="button" onClick={() => setOpenActionId(action.id)} aria-expanded={activeActionId === action.id}>
+                    <button className="action-accordion-head" type="button" onClick={() => toggleActionAccordion(action.id)} aria-expanded={activeActionId === action.id}>
                       <span>
                         <strong>{action.title}</strong>
                         <small>{action.category}</small>
