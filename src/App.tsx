@@ -137,6 +137,7 @@ type AppSettings = {
   smtpPass?: string
   smtpFrom: string
   smtpTls: boolean
+  reminderLeadDays: number
   allowUserEventCreation: boolean
   eventTemplates: EventTemplate[]
 }
@@ -345,6 +346,7 @@ const defaultSettings: AppSettings = {
   smtpPass: '',
   smtpFrom: 'Eventlotse <info@example.org>',
   smtpTls: true,
+  reminderLeadDays: 3,
   allowUserEventCreation: false,
   eventTemplates: builtInEventTemplates,
 }
@@ -367,6 +369,7 @@ const settingsSchema = z.object({
   smtpPass: z.string().optional(),
   smtpFrom: z.string().trim().min(1, 'Absender fehlt.'),
   smtpTls: z.boolean().default(true),
+  reminderLeadDays: z.number().min(0).max(30).default(3),
   allowUserEventCreation: z.boolean().default(false),
 })
 
@@ -383,6 +386,27 @@ const slugify = (value: string) =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '') || 'event'
+
+function buildInfrastructureActionCard(item: string, eventDate = '', ownerId = ''): ActionCard {
+  return {
+    id: uid(),
+    title: item,
+    category: 'Infrastruktur',
+    owners: ownerId ? [ownerId] : [],
+    deadline: eventDate,
+    notes: 'Automatisch aus der Infrastruktur-Checkliste erzeugt. Hauptverantwortliche Person koordiniert die Unteraufgaben.',
+    tasks: (infrastructureTaskTemplates[item] || [`${item} organisieren`, `${item} Aufbau klären`, `${item} Abbau klären`]).map((title) => ({
+      id: uid(),
+      title,
+      ownerIds: ownerId ? [ownerId] : [],
+      due: eventDate,
+      status: 'todo',
+      notes: '',
+      files: [],
+      comments: ['Aus Infrastrukturbedarf angelegt. Verantwortliche und Details nach SMART ergänzen.'],
+    })),
+  }
+}
 
 const blockedUploadExtensions = new Set([
   '.app',
@@ -618,6 +642,28 @@ function App() {
       throw new Error('Keine Berechtigung.')
     }
     const template = eventTemplates.find((entry) => entry.id === data.templateId)
+    const memberId = uid()
+    const templateActions = template?.actions.map((action) => ({
+      id: uid(),
+      title: action.title,
+      category: action.category,
+      owners: [],
+      deadline: data.date || '',
+      notes: '',
+      tasks: action.tasks.map((task) => ({
+        id: uid(),
+        title: task,
+        ownerIds: [],
+        due: data.date || '',
+        status: 'todo' as Status,
+        notes: '',
+        files: [],
+        comments: [],
+      })),
+    })) || []
+    const templateInfrastructureActions = (template?.infrastructure || [])
+      .filter((item) => !templateActions.some((action) => action.title === item && action.category === 'Infrastruktur'))
+      .map((item) => buildInfrastructureActionCard(item, data.date || '', memberId))
     const next: EventPlan = {
       id: uid(),
       name: data.name,
@@ -630,25 +676,8 @@ function App() {
       contact: '',
       photoUrl: '',
       archived: false,
-      members: [{ id: uid(), name: 'Michael', email: session.email, role: 'Admin' }],
-      actions: template?.actions.map((action) => ({
-        id: uid(),
-        title: action.title,
-        category: action.category,
-        owners: [],
-        deadline: data.date || '',
-        notes: '',
-        tasks: action.tasks.map((task) => ({
-          id: uid(),
-          title: task,
-          ownerIds: [],
-          due: data.date || '',
-          status: 'todo',
-          notes: '',
-          files: [],
-          comments: [],
-        })),
-      })) || [],
+      members: [{ id: memberId, name: session.name || 'Michael', email: session.email, role: 'Admin' }],
+      actions: [...templateActions, ...templateInfrastructureActions],
       budget: template?.budget.map((line) => ({ ...line, id: uid() })) || [],
       infrastructure: template?.infrastructure || [],
       runsheet: template?.runsheet.map((item) => ({ ...item, id: uid() })) || [],
@@ -1679,28 +1708,9 @@ function EventWorkspace({
 
   const infrastructureActionFor = (item: string) => event.actions.find((action) => action.title === item && action.category === 'Infrastruktur')
 
-  const buildInfrastructureAction = (item: string, ownerId = currentMember?.id || ''): ActionCard => ({
-    id: uid(),
-    title: item,
-    category: 'Infrastruktur',
-    owners: ownerId ? [ownerId] : [],
-    deadline: event.date,
-    notes: `Automatisch aus der Infrastruktur-Checkliste erzeugt. Hauptverantwortliche Person koordiniert die Unteraufgaben.`,
-    tasks: (infrastructureTaskTemplates[item] || [`${item} organisieren`, `${item} Aufbau klären`, `${item} Abbau klären`]).map((title) => ({
-      id: uid(),
-      title,
-      ownerIds: ownerId ? [ownerId] : [],
-      due: event.date,
-      status: 'todo',
-      notes: '',
-      files: [],
-      comments: ['Aus Infrastrukturbedarf angelegt. Verantwortliche und Details nach SMART ergänzen.'],
-    })),
-  })
-
   const toggleInfrastructure = (item: string, checked: boolean) => {
     const actionExists = Boolean(infrastructureActionFor(item))
-    const newAction = checked && !actionExists ? buildInfrastructureAction(item) : null
+    const newAction = checked && !actionExists ? buildInfrastructureActionCard(item, event.date, currentMember?.id || '') : null
     updateEvent({
       ...event,
       infrastructure: checked
@@ -1721,7 +1731,7 @@ function EventWorkspace({
     const existingAction = infrastructureActionFor(item)
     const nextAction = existingAction
       ? { ...existingAction, owners: ownerId ? [ownerId] : [] }
-      : buildInfrastructureAction(item, ownerId)
+      : buildInfrastructureActionCard(item, event.date, ownerId)
     updateEvent({
       ...event,
       infrastructure: [...event.infrastructure.filter((entry) => entry !== item), item],
@@ -1903,7 +1913,11 @@ function EventWorkspace({
                         members={event.members}
                         currentMemberId={currentMember?.id || ''}
                         taskFilter={taskFilter}
-                        canEdit={isAdmin || action.owners.some((owner) => owner === currentMember?.id)}
+                        canEdit={
+                          isAdmin
+                          || action.owners.some((owner) => owner === currentMember?.id)
+                          || action.tasks.some((task) => currentMember?.id && task.ownerIds.includes(currentMember.id))
+                        }
                         notify={notify}
                         updateAction={(next) =>
                           updateEvent({
@@ -2306,6 +2320,11 @@ function AdminPage({
             <label className="toggle-field">
               <input type="checkbox" {...settingsForm.register('smtpTls')} />
               TLS aktivieren
+            </label>
+            <label className="field">
+              <span className="label-row">Erinnerungsvorlauf <HelpHint text="Wie viele Tage vor Fälligkeit Aufgaben in die Erinnerungsmail aufgenommen werden." /></span>
+              <input type="number" min="0" max="30" {...settingsForm.register('reminderLeadDays', { valueAsNumber: true })} />
+              <small className="help-text">0 bedeutet: nur heute fällige Aufgaben. 3 erinnert heute und die nächsten drei Tage.</small>
             </label>
             <label className="toggle-field">
               <input type="checkbox" {...settingsForm.register('allowUserEventCreation')} />

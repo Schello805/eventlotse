@@ -19,6 +19,7 @@ export const config = {
   adminEmail: process.env.ADMIN_EMAIL || 'admin@example.de',
   adminPassword: process.env.ADMIN_PASSWORD || 'Eventlotse-Start123!',
   reminderHour: Number(process.env.REMINDER_HOUR || 8),
+  reminderLeadDays: Number(process.env.REMINDER_LEAD_DAYS || 3),
   smtp: {
     host: process.env.SMTP_HOST || '',
     port: Number(process.env.SMTP_PORT || 587),

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.26
+
+- Normalisierte PostgreSQL-Tabellen für Aktionen, Aufgaben, Infrastruktur, Zeitplan und Budget ergänzt.
+- Migration synchronisiert bestehende Event-JSON-Daten in die neuen Tabellen.
+- Helfer dürfen serverseitig nur verantwortete Aktionsgruppen oder eigene Unteraufgaben ändern.
+- Event-Templates erzeugen Infrastruktur-Aufgaben automatisch beim Event-Anlegen.
+- Erinnerungsvorlauf für bald fällige Aufgaben konfigurierbar gemacht.
+- Zusätzliche Tests für Datenmodell, Rechte und Erinnerungen ergänzt.
+
 ## v0.4.25
 
 - Infrastruktur-Haken erzeugen automatisch passende Aufgabenpakete im Aufgaben-Tab.

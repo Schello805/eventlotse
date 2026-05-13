@@ -12,11 +12,14 @@ import jwt from 'jsonwebtoken'
 import multer from 'multer'
 import path from 'node:path'
 import PDFDocument from 'pdfkit'
-import { canReadEventWithQuery, canWriteEventWithQuery } from './authz.js'
+import { canReadEventWithQuery, canWriteEventWithQuery, eventRoleWithQuery } from './authz.js'
 import { config } from './config.js'
 import { encryptSecret } from './crypto-box.js'
+import { canHelperUpdateEvent } from './event-permissions.js'
+import { syncNormalizedEvent } from './event-store.js'
 import { pool, query, transaction } from './db.js'
 import { createTransport, invitationMail, passwordResetMail, reminderMail, testMail } from './mail.js'
+import { dueTasksForEvent } from './reminders.js'
 import { mergeAppSettings, normalizeEventTemplates, sanitizeAppSettings } from './settings.js'
 import { hasExecutableSignature, isBlockedUpload } from './upload-security.js'
 
@@ -182,6 +185,10 @@ async function canWriteEvent(user, eventId) {
   return canWriteEventWithQuery(query, user, eventId)
 }
 
+async function eventRole(user, eventId) {
+  return eventRoleWithQuery(query, user, eventId)
+}
+
 function publicUser(user) {
   return {
     id: user.id,
@@ -237,24 +244,19 @@ function csvCell(value) {
   return `"${String(value || '').replaceAll('"', '""')}"`
 }
 
-function dueTasksForEvent(event, today) {
-  return (event.actions || [])
-    .flatMap((action) => (action.tasks || []).map((task) => ({ ...task, actionTitle: action.title })))
-    .filter((task) => task.status !== 'done' && task.due && task.due <= today)
-}
-
 async function runDueReminders(actor = null) {
   const today = new Date().toISOString().slice(0, 10)
   const already = await query("SELECT value FROM settings WHERE key = 'reminders:lastRun'")
   if (already.rows[0]?.value?.date === today) return []
 
   const eventsResult = await query('SELECT id, data FROM events ORDER BY updated_at DESC')
+  const settings = mergeAppSettings(await loadStoredSettings())
   const sent = []
   const transport = await createTransport()
 
   for (const row of eventsResult.rows) {
     const event = eventFromRow(row)
-    const dueTasks = dueTasksForEvent(event, today)
+    const dueTasks = dueTasksForEvent(event, today, settings.reminderLeadDays)
     if (!dueTasks.length) continue
 
     const recipients = [...new Set((event.members || []).map((member) => member.email))]
@@ -541,6 +543,7 @@ app.post('/api/events', requireAuth, async (request, response) => {
       'INSERT INTO event_members (event_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
       [inserted.rows[0].id, request.user.id, 'Admin'],
     )
+    await syncNormalizedEvent(client, inserted.rows[0].id, event)
     return inserted.rows[0]
   })
   await audit(request.user, `Event "${event.name}" wurde angelegt.`)
@@ -551,18 +554,30 @@ app.put('/api/events/:eventId', requireAuth, async (request, response) => {
   if (!(await canWriteEvent(request.user, request.params.eventId))) {
     return response.status(403).json({ message: 'Du darfst dieses Event nicht bearbeiten.' })
   }
-  const result = await query(
-    'UPDATE events SET data = $1, updated_at = now() WHERE id = $2 RETURNING id, data',
-    [JSON.stringify(request.body), request.params.eventId],
-  )
+
+  const currentResult = await query('SELECT id, data FROM events WHERE id = $1', [request.params.eventId])
+  if (!currentResult.rowCount) return response.status(404).json({ message: 'Event nicht gefunden.' })
+  const roleInEvent = await eventRole(request.user, request.params.eventId)
+  if (roleInEvent !== 'Admin' && !canHelperUpdateEvent(eventFromRow(currentResult.rows[0]), request.body, request.user.id)) {
+    return response.status(403).json({ message: 'Du darfst nur Aufgaben bearbeiten, für die du verantwortlich bist.' })
+  }
+
+  const result = await transaction(async (client) => {
+    const updated = await client.query(
+      'UPDATE events SET data = $1, updated_at = now() WHERE id = $2 RETURNING id, data',
+      [JSON.stringify(request.body), request.params.eventId],
+    )
+    await syncNormalizedEvent(client, request.params.eventId, request.body)
+    return updated
+  })
   if (!result.rowCount) return response.status(404).json({ message: 'Event nicht gefunden.' })
   await audit(request.user, `Event "${request.body.name}" wurde aktualisiert.`)
   response.json({ event: eventFromRow(result.rows[0]) })
 })
 
 app.delete('/api/events/:eventId', requireAuth, async (request, response) => {
-  if (!(await canWriteEvent(request.user, request.params.eventId))) {
-    return response.status(403).json({ message: 'Du darfst dieses Event nicht löschen.' })
+  if ((await eventRole(request.user, request.params.eventId)) !== 'Admin') {
+    return response.status(403).json({ message: 'Nur Event-Admins dürfen Events löschen.' })
   }
   const result = await query('DELETE FROM events WHERE id = $1 RETURNING data', [request.params.eventId])
   if (!result.rowCount) return response.status(404).json({ message: 'Event nicht gefunden.' })
@@ -571,8 +586,8 @@ app.delete('/api/events/:eventId', requireAuth, async (request, response) => {
 })
 
 app.post('/api/events/:eventId/members', requireAuth, async (request, response) => {
-  if (!(await canWriteEvent(request.user, request.params.eventId))) {
-    return response.status(403).json({ message: 'Du darfst dieses Team nicht bearbeiten.' })
+  if ((await eventRole(request.user, request.params.eventId)) !== 'Admin') {
+    return response.status(403).json({ message: 'Nur Event-Admins dürfen Teams verwalten.' })
   }
   const { email, name = '', note = '' } = request.body || {}
   const role = 'Helfer'
@@ -624,8 +639,8 @@ app.post('/api/events/:eventId/members', requireAuth, async (request, response) 
 })
 
 app.delete('/api/events/:eventId/members/:userId', requireAuth, async (request, response) => {
-  if (!(await canWriteEvent(request.user, request.params.eventId))) {
-    return response.status(403).json({ message: 'Du darfst dieses Team nicht bearbeiten.' })
+  if ((await eventRole(request.user, request.params.eventId)) !== 'Admin') {
+    return response.status(403).json({ message: 'Nur Event-Admins dürfen Teams verwalten.' })
   }
   const eventResult = await query('SELECT id, data FROM events WHERE id = $1', [request.params.eventId])
   if (!eventResult.rowCount) return response.status(404).json({ message: 'Event nicht gefunden.' })

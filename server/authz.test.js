@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { canReadEventWithQuery, canWriteEventWithQuery } from './authz.js'
+import { canReadEventWithQuery, canWriteEventWithQuery, eventRoleWithQuery } from './authz.js'
 
 const admin = { id: 'admin-id', role: 'Admin' }
 const helper = { id: 'helper-id', role: 'Helfer' }
@@ -38,4 +38,11 @@ test('Helfer darf nur schreiben, wenn die Event-Rolle passt', async () => {
 
 test('Entfernte Teammitglieder verlieren Schreibrechte', async () => {
   assert.equal(await canWriteEventWithQuery(queryReturning(0), helper, 'event-id'), false)
+})
+
+test('Event-Rolle unterscheidet globale Admins von Event-Admins', async () => {
+  const queryFn = async () => ({ rows: [{ role: 'Admin' }], rowCount: 1 })
+
+  assert.equal(await eventRoleWithQuery(queryReturning(0), admin, 'event-id'), 'Admin')
+  assert.equal(await eventRoleWithQuery(queryFn, helper, 'event-id'), 'Admin')
 })

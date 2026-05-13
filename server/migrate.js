@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import { config } from './config.js'
 import { encryptSecret } from './crypto-box.js'
 import { query } from './db.js'
+import { syncNormalizedEvent } from './event-store.js'
 import { appSettingsFromEnv, isPlaceholderValue, mergeAppSettings } from './settings.js'
 
 const schema = `
@@ -71,10 +72,71 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS event_actions (
+  id text NOT NULL,
+  event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  title text NOT NULL DEFAULT '',
+  category text NOT NULL DEFAULT '',
+  owners jsonb NOT NULL DEFAULT '[]'::jsonb,
+  deadline date,
+  notes text NOT NULL DEFAULT '',
+  position integer NOT NULL DEFAULT 0,
+  PRIMARY KEY (event_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS event_tasks (
+  id text NOT NULL,
+  event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  action_id text NOT NULL,
+  title text NOT NULL DEFAULT '',
+  owner_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+  due_date date,
+  status text NOT NULL CHECK (status IN ('todo', 'doing', 'done')),
+  notes text NOT NULL DEFAULT '',
+  files jsonb NOT NULL DEFAULT '[]'::jsonb,
+  comments jsonb NOT NULL DEFAULT '[]'::jsonb,
+  position integer NOT NULL DEFAULT 0,
+  PRIMARY KEY (event_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS event_infrastructure (
+  event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  label text NOT NULL,
+  owner_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+  position integer NOT NULL DEFAULT 0,
+  PRIMARY KEY (event_id, label)
+);
+
+CREATE TABLE IF NOT EXISTS event_runsheet (
+  id text NOT NULL,
+  event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  time text NOT NULL DEFAULT '',
+  title text NOT NULL DEFAULT '',
+  owner text NOT NULL DEFAULT '',
+  position integer NOT NULL DEFAULT 0,
+  PRIMARY KEY (event_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS event_budget (
+  id text NOT NULL,
+  event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  label text NOT NULL DEFAULT '',
+  type text NOT NULL CHECK (type IN ('income', 'expense')),
+  amount numeric NOT NULL DEFAULT 0,
+  position integer NOT NULL DEFAULT 0,
+  PRIMARY KEY (event_id, id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_data_gin ON events USING gin (data);
 CREATE INDEX IF NOT EXISTS idx_event_members_user ON event_members (user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_invite_tokens_user ON invite_tokens (user_id);
+CREATE INDEX IF NOT EXISTS idx_event_actions_event ON event_actions (event_id, position);
+CREATE INDEX IF NOT EXISTS idx_event_tasks_event ON event_tasks (event_id, status, due_date);
+CREATE INDEX IF NOT EXISTS idx_event_tasks_action ON event_tasks (action_id, position);
+CREATE INDEX IF NOT EXISTS idx_event_infrastructure_event ON event_infrastructure (event_id, position);
+CREATE INDEX IF NOT EXISTS idx_event_runsheet_event ON event_runsheet (event_id, position);
+CREATE INDEX IF NOT EXISTS idx_event_budget_event ON event_budget (event_id, position);
 `
 
 async function ensureAdmin() {
@@ -93,6 +155,10 @@ async function ensureAdmin() {
 async function main() {
   await query(schema)
   await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_note text NOT NULL DEFAULT ''")
+  const events = await query('SELECT id, data FROM events')
+  for (const event of events.rows) {
+    await syncNormalizedEvent({ query }, event.id, event.data)
+  }
   await ensureAdmin()
   await query(
     `INSERT INTO settings (key, value)

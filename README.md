@@ -6,7 +6,7 @@ Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.25` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.4.26` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, feineren Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
@@ -17,6 +17,8 @@ Rev. `v0.4.25` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 - Event-Templates für wiederkehrende Abläufe wie Hochzeit, Tanzevent oder Vereinsfest, inklusive JSON-Import und JSON-Export im Adminbereich
 - eigene Infrastruktur-Ansicht mit automatisch erzeugten Aufgabenpaketen, editierbarer Zeitplan und SMART-orientierte Aufgabenfelder mit Bemerkungen
 - Aktionskarten mit Kanban-Unteraufgaben, Drag-Leiste, Status, Verantwortlichen, Deadline und Datei-Merkliste
+- normalisierte PostgreSQL-Tabellen für Aktionen, Aufgaben, Infrastruktur, Zeitplan und Budget als stabile Datenbasis
+- feinere Bearbeitungsrechte: Helfer bearbeiten nur verantwortete Aktionsgruppen oder eigene Unteraufgaben
 - klare Aufgaben-Akkordeons, bei denen immer nur ein Arbeitsbereich geöffnet ist
 - eventbezogene Teamverwaltung per E-Mail, Name, Funktion/Kommentar und Entfernen aus dem Event
 - Account-Datenexport im Profil und Selbstlöschung für Helfer
@@ -38,6 +40,7 @@ Rev. `v0.4.25` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 - Dateiliste mit Download und Löschen pro Event
 - iCal-Export, CSV-/XLSX-Aufgabenexport und PDF-Ablaufplan
 - manueller und automatischer Erinnerungslauf für fällige Aufgaben
+- konfigurierbarer Erinnerungsvorlauf für bald fällige Aufgaben
 - SMTP-Passwort wird verschlüsselt gespeichert
 - PostgreSQL-Migrationen, Upload-Endpunkt und Backup-/Restore-Scripte
 - CSRF-Schutz, Rate-Limits und Upload-Validierung gegen ausführbare Dateien und Signaturen

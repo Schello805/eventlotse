@@ -91,6 +91,7 @@ Wenn du komplett auf einen neuen Server umziehst, zuerst Installation ausführen
 
 - Backend-API mit Node.js und Express
 - PostgreSQL-Schema mit Migration
+- normalisierte Tabellen für Aktionen, Aufgaben, Infrastruktur, Zeitplan und Budget
 - Authentifizierung mit HttpOnly-Cookie
 - Rollenmodell: Admin und Helfer
 - Event-spezifische Mitgliederrechte
@@ -101,6 +102,7 @@ Wenn du komplett auf einen neuen Server umziehst, zuerst Installation ausführen
 - Dateidownload und Dateilöschung
 - iCal-, CSV-, XLSX- und PDF-Export
 - manueller und automatischer Erinnerungslauf für fällige Aufgaben
+- konfigurierbarer Erinnerungsvorlauf für bald fällige Aufgaben
 - verschlüsselte Speicherung des SMTP-Passworts
 - CSRF-Schutz für angemeldete Schreibzugriffe
 - Upload-Schutz gegen ausführbare Endungen und Signaturen
