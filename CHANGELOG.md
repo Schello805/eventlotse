@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.35
+
+- Native Drag-Leiste auf Smartphones ausgeblendet, damit mobile Browser keine Task-ID als Suchtext öffnen.
+- Mobile Statusbuttons „Offen“, „In Arbeit“ und „Erledigt“ direkt auf Aufgabenkarte ergänzt.
+
 ## v0.4.34
 
 - Mobiles Event-Untermenü von horizontalem Scrollen auf sichtbares 2-Spalten-Menü umgestellt.

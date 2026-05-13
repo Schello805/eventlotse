@@ -2984,6 +2984,21 @@ function ActionBoard({
                   <small>{members.find((member) => member.id === task.ownerIds[0])?.name || 'ohne Verantwortliche'}</small>
                   {task.status !== 'done' && task.due && task.due < today && <small className="danger-chip">Überfällig</small>}
                 </div>
+                {canEdit && (
+                  <div className="mobile-status-buttons" aria-label="Aufgabe verschieben">
+                    {(['todo', 'doing', 'done'] as Status[]).map((nextStatus) => (
+                      <button
+                        type="button"
+                        className={task.status === nextStatus ? 'active' : ''}
+                        key={nextStatus}
+                        onClick={() => moveTask(task, nextStatus)}
+                        disabled={task.status === nextStatus}
+                      >
+                        {statusLabel(nextStatus)}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <details className="task-details">
                   <summary>Details bearbeiten</summary>
                   <label className="task-field">
