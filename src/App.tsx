@@ -2083,7 +2083,8 @@ function EventWorkspace({
           <span className={`save-state ${saveState}`}>{saveStateLabel(saveState)}</span>
         </div>
         <div className="hero-stats" aria-label="Event Kennzahlen">
-          <Stat icon={<Users />} label="Gäste geplant" value={String(event.guests)} />
+          <Stat icon={<Users />} label="Gäste" value={event.targetGroup && event.targetGroup !== 'Privater Kreis' && event.guests > 0 ? String(event.guests) : ''} />
+          <Stat icon={<UserCog />} label="Helfer" value={String(event.members.filter((member) => member.role !== 'Admin').length)} />
           <Stat icon={<MapPin />} label="Ort" value={event.location || 'offen'} />
           <Stat icon={<ShieldCheck />} label="Rolle" value={session.role} />
         </div>

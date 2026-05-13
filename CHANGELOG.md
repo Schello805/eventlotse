@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.38
+
+- Header-Kennzahl „Gäste geplant“ zu „Gäste“ zurückbenannt.
+- Gästezahl bleibt leer, wenn keine konkrete Zielgruppe gesetzt ist.
+- Helferanzahl als eigene Header-Kennzahl ergänzt.
+
 ## v0.4.37
 
 - Aufgabenkarte auf ein einziges Bemerkungsfeld reduziert.
