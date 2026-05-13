@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
@@ -105,6 +105,9 @@ type EventPlan = {
   mapUrl: string
   contact: string
   photoUrl: string
+  flyerFileId?: string
+  flyerFileName?: string
+  flyerMimeType?: string
   archived: boolean
   members: Member[]
   actions: ActionCard[]
@@ -460,6 +463,9 @@ function normalizeEvent(event: EventPlan): EventPlan {
   return {
     ...event,
     photoUrl: event.photoUrl || '',
+    flyerFileId: event.flyerFileId || '',
+    flyerFileName: event.flyerFileName || '',
+    flyerMimeType: event.flyerMimeType || '',
     archived: Boolean(event.archived),
     members: event.members.map((member) => ({ ...member, role: normalizeRole(member.role) })),
   }
@@ -675,6 +681,9 @@ function App() {
       mapUrl: '',
       contact: '',
       photoUrl: '',
+      flyerFileId: '',
+      flyerFileName: '',
+      flyerMimeType: '',
       archived: false,
       members: [{ id: memberId, name: session.name || 'Michael', email: session.email, role: 'Admin' }],
       actions: [...templateActions, ...templateInfrastructureActions],
@@ -1783,6 +1792,39 @@ function EventWorkspace({
     }
   }
 
+  const uploadFlyer = async (file: File | undefined) => {
+    if (!file) return
+    if (isBlockedUploadFile(file.name)) {
+      notify('Diese Dateiart ist aus Sicherheitsgründen gesperrt. Bitte keine ausführbaren Dateien hochladen.')
+      return
+    }
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('eventId', event.id)
+    try {
+      const response = await secureFetch('/api/uploads', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        notify(data?.message || 'Flyer konnte nicht hochgeladen werden.')
+        return
+      }
+      const uploaded = data.file as StoredFile
+      setFiles((current) => [uploaded, ...current])
+      updateEvent({
+        ...event,
+        flyerFileId: uploaded.id,
+        flyerFileName: uploaded.original_name,
+        flyerMimeType: uploaded.mime_type,
+      })
+      notify(`Flyer "${uploaded.original_name}" wurde hochgeladen.`)
+    } catch {
+      notify('Flyer konnte nicht hochgeladen werden.')
+    }
+  }
+
   const updateInfrastructureOwner = (item: string, ownerId: string) => {
     const existingAction = infrastructureActionFor(item)
     const nextAction = existingAction
@@ -1863,6 +1905,31 @@ function EventWorkspace({
               <EditableField label="Karten-Link" help="Link zu Google Maps, Apple Karten oder einem Lageplan." value={event.mapUrl} onChange={(mapUrl) => updateEvent({ ...event, mapUrl })} disabled={!isAdmin} />
               <EditableField label="Kontakt vor Ort" help="Person, Telefonnummer oder Hinweis für Schlüssel, Zugang und Strom." value={event.contact} onChange={(contact) => updateEvent({ ...event, contact })} disabled={!isAdmin} />
               <EditableField label="Fotoalbum-Link" help="Link zu Nextcloud, Dropbox, Google Fotos oder einem Ordner, in dem Fotos während und nach dem Event gesammelt werden." value={event.photoUrl} onChange={(photoUrl) => updateEvent({ ...event, photoUrl })} disabled={!isAdmin} />
+            </div>
+            <div className="flyer-box">
+              <div>
+                <strong>Flyer</strong>
+                <p className="help-text">Grafik oder PDF zum Event hinterlegen. Bilder werden hier klein angezeigt.</p>
+                {event.flyerFileName && <a className="ghost" href={`/api/files/${event.flyerFileId}/download`}><Download size={15} /> {event.flyerFileName}</a>}
+              </div>
+              {event.flyerFileId && event.flyerMimeType?.startsWith('image/') ? (
+                <img src={`/api/files/${event.flyerFileId}/preview`} alt={`Flyer ${event.flyerFileName || event.name}`} />
+              ) : (
+                <div className="flyer-preview-empty"><FileText size={20} /> Noch keine Bildvorschau</div>
+              )}
+              {isAdmin && (
+                <label className="ghost flyer-upload">
+                  <Upload size={15} /> Flyer hochladen
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf,.pdf"
+                    onChange={(change) => {
+                      void uploadFlyer(change.target.files?.[0])
+                      change.target.value = ''
+                    }}
+                  />
+                </label>
+              )}
             </div>
             {event.photoUrl && <a className="ghost album-link" href={event.photoUrl} target="_blank" rel="noreferrer">Fotoalbum öffnen</a>}
           </section>
@@ -2956,9 +3023,34 @@ function InfoPanel({
 }
 
 function HelpHint({ text }: { text: string }) {
+  const iconRef = useRef<HTMLSpanElement>(null)
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+  const showTooltip = () => {
+    const box = iconRef.current?.getBoundingClientRect()
+    if (!box) return
+    const width = Math.min(320, window.innerWidth - 24)
+    const left = Math.min(Math.max(12, box.left + box.width / 2 - width / 2), window.innerWidth - width - 12)
+    const below = box.bottom + 8
+    const top = below > window.innerHeight - 90 ? Math.max(12, box.top - 86) : below
+    setPosition({ top, left })
+  }
   return (
-    <span className="help-icon" data-tooltip={text} aria-label={text} tabIndex={0}>
+    <span
+      className="help-icon"
+      ref={iconRef}
+      aria-label={text}
+      tabIndex={0}
+      onBlur={() => setPosition(null)}
+      onFocus={showTooltip}
+      onMouseEnter={showTooltip}
+      onMouseLeave={() => setPosition(null)}
+    >
       <CircleHelp size={14} />
+      {position && (
+        <span className="help-tooltip" role="tooltip" style={{ top: position.top, left: position.left }}>
+          {text}
+        </span>
+      )}
     </span>
   )
 }

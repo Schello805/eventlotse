@@ -678,6 +678,20 @@ app.get('/api/files/:fileId/download', requireAuth, async (request, response) =>
   response.download(path.join(config.uploadDir, file.stored_name), sanitizeFilename(file.original_name))
 })
 
+app.get('/api/files/:fileId/preview', requireAuth, async (request, response) => {
+  const result = await query('SELECT * FROM files WHERE id = $1', [request.params.fileId])
+  const file = result.rows[0]
+  if (!file || !(await canReadEvent(request.user, file.event_id))) {
+    return response.status(404).json({ message: 'Datei nicht gefunden.' })
+  }
+  if (!String(file.mime_type || '').startsWith('image/')) {
+    return response.status(415).json({ message: 'Für diese Datei gibt es keine Bildvorschau.' })
+  }
+  response.setHeader('Content-Type', file.mime_type)
+  response.setHeader('Content-Disposition', `inline; filename="${sanitizeFilename(file.original_name)}"`)
+  response.sendFile(path.join(config.uploadDir, file.stored_name))
+})
+
 app.delete('/api/files/:fileId', requireAuth, async (request, response) => {
   const result = await query('SELECT * FROM files WHERE id = $1', [request.params.fileId])
   const file = result.rows[0]

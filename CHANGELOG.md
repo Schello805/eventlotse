@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.30
+
+- Tooltips werden jetzt als feste Overlay-Hinweise angezeigt und nicht mehr von Karten oder Panels abgeschnitten.
+- Flyer-Upload im Event-Steckbrief ergänzt.
+- Kleine Flyer-Vorschau für hochgeladene Bilddateien ergänzt.
+
 ## v0.4.29
 
 - Aufgaben-Akkordeons können jetzt vollständig zugeklappt werden.

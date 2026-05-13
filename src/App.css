@@ -961,34 +961,21 @@ form {
   color: #0f766e;
 }
 
-.help-icon::after {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 50;
-  width: max-content;
-  max-width: min(320px, 80vw);
+.help-tooltip {
+  position: fixed;
+  z-index: 10000;
+  width: min(320px, calc(100vw - 24px));
   padding: 8px 10px;
   border: 1px solid #cfd7e3;
   border-radius: 7px;
   background: #172033;
   color: white;
   box-shadow: 0 14px 28px rgba(25, 38, 63, 0.18);
-  content: attr(data-tooltip);
   font-size: 12px;
   font-weight: 650;
   line-height: 1.35;
-  opacity: 0;
   pointer-events: none;
-  transform: translateY(-2px);
-  transition: opacity 0.04s linear, transform 0.04s linear;
   white-space: normal;
-}
-
-.help-icon:hover::after,
-.help-icon:focus-visible::after {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 .export-menu {
@@ -1057,6 +1044,47 @@ form {
 
 .album-link {
   margin-top: 12px;
+}
+
+.flyer-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px auto;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid #dce6f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.flyer-box .help-text {
+  margin: 3px 0 8px;
+}
+
+.flyer-box img,
+.flyer-preview-empty {
+  width: 112px;
+  height: 78px;
+  border: 1px solid #dce6f0;
+  border-radius: 7px;
+  background: white;
+}
+
+.flyer-box img {
+  object-fit: cover;
+}
+
+.flyer-preview-empty {
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  font-size: 11px;
+  text-align: center;
+}
+
+.flyer-upload input {
+  display: none;
 }
 
 .field span {
@@ -2057,6 +2085,7 @@ form {
 
   .sidebar,
   .profile-grid,
+  .flyer-box,
   .check-grid,
   .template-grid,
   .kanban,
@@ -2097,6 +2126,12 @@ form {
   .event-admin-actions .ghost {
     flex: 1;
     justify-content: center;
+  }
+
+  .flyer-box img,
+  .flyer-preview-empty {
+    width: 100%;
+    height: 120px;
   }
 
   .task-card,

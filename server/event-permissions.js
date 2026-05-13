@@ -35,7 +35,7 @@ function helperMayChangeAction(before = {}, after = {}, userId = '') {
 }
 
 export function canHelperUpdateEvent(current = {}, next = {}, userId = '') {
-  const immutableKeys = ['id', 'name', 'motto', 'targetGroup', 'guests', 'date', 'location', 'mapUrl', 'contact', 'photoUrl', 'archived', 'members', 'budget', 'infrastructure', 'runsheet', 'actNotes', 'wiki']
+  const immutableKeys = ['id', 'name', 'motto', 'targetGroup', 'guests', 'date', 'location', 'mapUrl', 'contact', 'photoUrl', 'flyerFileId', 'flyerFileName', 'flyerMimeType', 'archived', 'members', 'budget', 'infrastructure', 'runsheet', 'actNotes', 'wiki']
   for (const key of immutableKeys) {
     if (!jsonEqual(current[key], next[key])) return false
   }
