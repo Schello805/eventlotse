@@ -748,7 +748,6 @@ function App() {
             element={
               session.authenticated && session.role === 'Admin' ? (
                 <AdminPage
-                  session={session}
                   settings={settings}
                   templates={eventTemplates}
                   auditLog={auditLog}
@@ -2520,7 +2519,6 @@ Absprachen: 45 Minuten Set, Rechnung folgt`}
 }
 
 function AdminPage({
-  session,
   settings,
   templates,
   auditLog,
@@ -2529,7 +2527,6 @@ function AdminPage({
   addAudit,
   notify,
 }: {
-  session: { email: string; role: Role; authenticated: boolean }
   settings: AppSettings
   templates: EventTemplate[]
   auditLog: AuditEntry[]
@@ -2541,7 +2538,6 @@ function AdminPage({
   const [toast, setToast] = useState<ToastState>(null)
   const [testMailTo, setTestMailTo] = useState(settings.smtpUser || 'info@schellenberger.biz')
   const [testMailPending, setTestMailPending] = useState(false)
-  const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' })
   const [templateJson, setTemplateJson] = useState('')
   const settingsForm = useForm<SettingsFormInput, unknown, SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
@@ -2652,30 +2648,6 @@ function AdminPage({
     }
   }
 
-  const changeOwnPassword = async () => {
-    if (passwordDraft.newPassword !== passwordDraft.repeatPassword) {
-      notify('Die neuen Passwörter stimmen nicht überein.')
-      return
-    }
-    try {
-      const response = await secureFetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentPassword: passwordDraft.currentPassword,
-          newPassword: passwordDraft.newPassword,
-        }),
-      })
-      const data = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(data?.message || 'Passwort konnte nicht geändert werden.')
-      setPasswordDraft({ currentPassword: '', newPassword: '', repeatPassword: '' })
-      notify('Passwort wurde geändert.')
-      addAudit(`Admin "${session.email}" hat das eigene Passwort geändert.`)
-    } catch (error) {
-      notify(error instanceof Error ? error.message : 'Passwort konnte nicht geändert werden.')
-    }
-  }
-
   const runReminders = async () => {
     const response = await secureFetch('/api/admin/reminders/run', { method: 'POST' })
     const data = await response.json().catch(() => null)
@@ -2759,26 +2731,6 @@ function AdminPage({
                 <Mail size={16} /> {testMailPending ? 'Sende...' : 'Testmail'}
               </button>
             </div>
-          </div>
-        </details>
-
-        <details className="panel admin-panel accordion-panel span-2">
-          <summary><span>Eigenes Passwort ändern</span><Lock size={18} /></summary>
-          <p className="help-text">Nach der Installation bitte das vorgegebene Admin-Passwort sofort durch ein eigenes Passwort ersetzen.</p>
-          <div className="admin-form">
-            <label className="field">
-              <span>Aktuelles Passwort</span>
-              <input type="password" value={passwordDraft.currentPassword} onChange={(event) => setPasswordDraft({ ...passwordDraft, currentPassword: event.target.value })} />
-            </label>
-            <label className="field">
-              <span>Neues Passwort</span>
-              <input type="password" value={passwordDraft.newPassword} onChange={(event) => setPasswordDraft({ ...passwordDraft, newPassword: event.target.value })} />
-            </label>
-            <label className="field">
-              <span>Neues Passwort wiederholen</span>
-              <input type="password" value={passwordDraft.repeatPassword} onChange={(event) => setPasswordDraft({ ...passwordDraft, repeatPassword: event.target.value })} />
-            </label>
-            <button className="primary" type="button" onClick={changeOwnPassword}><Save size={16} /> Passwort speichern</button>
           </div>
         </details>
 

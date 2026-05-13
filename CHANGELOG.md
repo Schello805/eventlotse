@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.33
+
+- Doppelte Passwortänderung aus dem Adminbereich entfernt; Passwort und E-Mail liegen im Profil.
+- Entfernte Event-Helfer ohne weitere Event-Zugehörigkeit werden aus der Nutzertabelle bereinigt.
+- E-Mail-Änderungen können verwaiste Helfer-Adressen übernehmen, statt daran zu scheitern.
+
 ## v0.4.32
 
 - Startassistent im Event zu einer vollständigen Setup-Checkliste erweitert.

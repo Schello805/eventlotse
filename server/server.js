@@ -254,6 +254,10 @@ function memberEmailById(event, memberId) {
   return (event.members || []).find((member) => member.id === memberId)?.email
 }
 
+function canRecycleEmailUser(user) {
+  return user && user.role === 'Helfer' && Number(user.member_count || 0) === 0
+}
+
 function taskUrl(baseUrl, eventId, taskId) {
   return `${baseUrl}/events/${eventId}#task-${taskId}`
 }
@@ -439,8 +443,15 @@ app.post('/api/auth/request-email-change', requireAuth, async (request, response
   if (newEmail === request.user.email) {
     return response.status(400).json({ message: 'Das ist bereits deine aktuelle E-Mail-Adresse.' })
   }
-  const existing = await query('SELECT id FROM users WHERE email = $1', [newEmail])
-  if (existing.rowCount) {
+  const existing = await query(
+    `SELECT u.id, u.role, COUNT(em.event_id) AS member_count
+     FROM users u
+     LEFT JOIN event_members em ON em.user_id = u.id
+     WHERE u.email = $1
+     GROUP BY u.id, u.role`,
+    [newEmail],
+  )
+  if (existing.rowCount && !canRecycleEmailUser(existing.rows[0])) {
     return response.status(409).json({ message: 'Diese E-Mail-Adresse wird bereits verwendet.' })
   }
   const token = crypto.randomBytes(32).toString('base64url')
@@ -477,12 +488,22 @@ app.post('/api/email-change/:token/confirm', async (request, response) => {
   if (!change.active) {
     return response.status(400).json({ message: 'Dieser Account ist deaktiviert.' })
   }
-  const duplicate = await query('SELECT id FROM users WHERE email = $1 AND id <> $2', [change.new_email, change.user_id])
-  if (duplicate.rowCount) {
+  const duplicate = await query(
+    `SELECT u.id, u.role, COUNT(em.event_id) AS member_count
+     FROM users u
+     LEFT JOIN event_members em ON em.user_id = u.id
+     WHERE u.email = $1 AND u.id <> $2
+     GROUP BY u.id, u.role`,
+    [change.new_email, change.user_id],
+  )
+  if (duplicate.rowCount && !canRecycleEmailUser(duplicate.rows[0])) {
     return response.status(409).json({ message: 'Diese E-Mail-Adresse wird inzwischen bereits verwendet.' })
   }
 
   const updatedUser = await transaction(async (client) => {
+    if (duplicate.rowCount && canRecycleEmailUser(duplicate.rows[0])) {
+      await client.query('DELETE FROM users WHERE id = $1', [duplicate.rows[0].id])
+    }
     const userResult = await client.query(
       `UPDATE users
        SET email = $1, updated_at = now()
@@ -796,6 +817,10 @@ app.delete('/api/events/:eventId/members/:userId', requireAuth, async (request, 
   await transaction(async (client) => {
     await client.query('DELETE FROM event_members WHERE event_id = $1 AND user_id = $2', [request.params.eventId, request.params.userId])
     await client.query('UPDATE events SET data = $1, updated_at = now() WHERE id = $2', [JSON.stringify(updatedEvent), request.params.eventId])
+    const remaining = await client.query('SELECT 1 FROM event_members WHERE user_id = $1 LIMIT 1', [request.params.userId])
+    if (!remaining.rowCount) {
+      await client.query("DELETE FROM users WHERE id = $1 AND role = 'Helfer'", [request.params.userId])
+    }
   })
   await audit(request.user, `Mitglied "${member.email}" wurde aus "${event.name}" entfernt.`)
   response.json({ event: updatedEvent })
