@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.40
+
+- „Als Vorlage speichern“ öffnet jetzt einen Assistenten statt sofort zu speichern.
+- Vorlagen bekommen neben dem Namen ein Infofeld für Varianten wie „außen, überdacht, DJ“.
+- Beim Speichern aus einem Event kann gezielt gewählt werden, welche Bereiche in die Vorlage übernommen werden.
+- Zusammenfassung ergänzt, welche Inhalte übernommen und welche bewusst ausgeschlossen werden.
+
 ## v0.4.39
 
 - Template Store mit klarer Schritt-für-Schritt-Erklärung ergänzt.

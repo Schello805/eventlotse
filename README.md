@@ -6,7 +6,7 @@ Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.39` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, feineren Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.4.40` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, feineren Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
@@ -66,7 +66,7 @@ Rev. `v0.4.39` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 
 Admins pflegen globale Vorlagen im Adminbereich unter **Template Store**. Eine Vorlage kann Standard-Arbeitsbereiche, Unteraufgaben, Infrastruktur-Haken, Zeitplan-Punkte, Budgetposten und Wiki-Notizen enthalten. Beim Anlegen eines Events wählt ein Nutzer optional eine Vorlage aus; Eventlotse kopiert den Inhalt einmalig in das neue Event.
 
-Wichtig: Eine Vorlage ist kein Live-Link. Änderungen im Event ändern die Vorlage nicht automatisch. Wenn ein fertiges Event später als neue Grundlage dienen soll, speichert ein Admin es im Event über **Als Vorlage speichern**. Dabei werden Planungsinhalte übernommen, aber keine Teammitglieder, Anhänge, Kommentare, Fotos oder persönlichen Verantwortlichkeiten.
+Wichtig: Eine Vorlage ist kein Live-Link. Änderungen im Event ändern die Vorlage nicht automatisch. Wenn ein fertiges Event später als neue Grundlage dienen soll, speichert ein Admin es im Event über **Als Vorlage speichern**. Dabei öffnet sich ein Assistent: Name, Infofeld und die zu übernehmenden Bereiche werden bewusst gewählt. Planungsinhalte können übernommen werden, Teammitglieder, Anhänge, Kommentare, Fotos und persönliche Aufgaben-Verantwortliche bleiben ausgeschlossen.
 
 Vorlagen lassen sich als JSON exportieren und wieder importieren. Dadurch kannst du dir eigene wiederkehrende Eventtypen bauen, zum Beispiel einen Tanzabend für deine Frau, und dieselbe Vorlage später erneut verwenden oder mit anderen Eventlotse-Installationen teilen.
 

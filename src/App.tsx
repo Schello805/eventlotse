@@ -132,6 +132,18 @@ type EventTemplate = {
   wiki: string[]
 }
 
+type TemplateDraft = {
+  name: string
+  description: string
+  includeBasics: boolean
+  includeActions: boolean
+  includeInfrastructure: boolean
+  includeRunsheet: boolean
+  includeRunsheetOwners: boolean
+  includeBudget: boolean
+  includeWiki: boolean
+}
+
 type AppSettings = {
   baseUrl: string
   smtpHost: string
@@ -1653,6 +1665,7 @@ function EventWorkspace({
   const [openActionId, setOpenActionId] = useState('')
   const [taskFilter, setTaskFilter] = useState<TaskFilter>(session.role === 'Admin' ? 'all' : 'mine')
   const [files, setFiles] = useState<StoredFile[]>([])
+  const [templateDraft, setTemplateDraft] = useState<TemplateDraft | null>(null)
   const currentMember = event.members.find((member) => member.email === session.email)
   const isAdmin = session.role === 'Admin' || currentMember?.role === 'Admin'
   const openTaskCount = event.actions.flatMap((action) => action.tasks).filter((task) => task.status !== 'done').length
@@ -1886,27 +1899,51 @@ function EventWorkspace({
     notify('Export wurde erstellt.')
   }
 
-  const saveEventAsTemplate = async () => {
+  const openTemplateAssistant = () => {
     if (!isAdmin) {
       notify('Nur Admins können Event-Vorlagen speichern.')
       return
     }
-    const template: EventTemplate = {
-      id: `template-${slugify(event.name)}-${Date.now()}`,
+    setTemplateDraft({
       name: `${event.name} Vorlage`,
-      description: `Aus dem Event "${event.name}" gespeichert.`,
-      motto: event.motto,
-      targetGroup: event.targetGroup,
-      guests: event.guests,
-      actions: event.actions.map((action) => ({
-        title: action.title,
-        category: action.category,
-        tasks: action.tasks.map((task) => task.title).filter(Boolean),
-      })),
-      infrastructure: event.infrastructure,
-      runsheet: event.runsheet.map((item) => ({ time: item.time, title: item.title, owner: item.owner })),
-      budget: event.budget.map((line) => ({ label: line.label, type: line.type, amount: line.amount })),
-      wiki: event.wiki,
+      description: event.motto ? `${event.motto}` : `Aus dem Event "${event.name}" gespeichert.`,
+      includeBasics: true,
+      includeActions: true,
+      includeInfrastructure: true,
+      includeRunsheet: true,
+      includeRunsheetOwners: false,
+      includeBudget: true,
+      includeWiki: true,
+    })
+  }
+
+  const saveEventAsTemplate = async () => {
+    if (!templateDraft) return
+    const name = templateDraft.name.trim()
+    if (!name) {
+      notify('Bitte gib einen Namen für die Vorlage ein.')
+      return
+    }
+    const template: EventTemplate = {
+      id: `template-${slugify(name)}-${Date.now()}`,
+      name,
+      description: templateDraft.description.trim(),
+      motto: templateDraft.includeBasics ? event.motto : '',
+      targetGroup: templateDraft.includeBasics ? event.targetGroup : '',
+      guests: templateDraft.includeBasics ? event.guests : 0,
+      actions: templateDraft.includeActions
+        ? event.actions.map((action) => ({
+          title: action.title,
+          category: action.category,
+          tasks: action.tasks.map((task) => task.title).filter(Boolean),
+        }))
+        : [],
+      infrastructure: templateDraft.includeInfrastructure ? event.infrastructure : [],
+      runsheet: templateDraft.includeRunsheet
+        ? event.runsheet.map((item) => ({ time: item.time, title: item.title, owner: templateDraft.includeRunsheetOwners ? item.owner : '' }))
+        : [],
+      budget: templateDraft.includeBudget ? event.budget.map((line) => ({ label: line.label, type: line.type, amount: line.amount })) : [],
+      wiki: templateDraft.includeWiki ? event.wiki : [],
     }
     const nextTemplates = [template, ...templates.filter((entry) => entry.id !== template.id)]
     try {
@@ -1921,9 +1958,11 @@ function EventWorkspace({
       }
       const data = await response.json()
       setTemplates(normalizeTemplates(data.templates || nextTemplates))
+      setTemplateDraft(null)
       notify('Event wurde als neue Vorlage gespeichert. Sie ist beim nächsten Event-Erstellen auswählbar.')
     } catch (error) {
       setTemplates(nextTemplates)
+      setTemplateDraft(null)
       notify(error instanceof Error ? error.message : 'Vorlage wurde lokal gespeichert und ist beim nächsten Event-Erstellen auswählbar.')
     }
   }
@@ -2075,6 +2114,8 @@ function EventWorkspace({
     notify(`Hauptverantwortung für "${item}" wurde aktualisiert.`)
   }
 
+  const templateTaskCount = event.actions.reduce((count, action) => count + action.tasks.length, 0)
+
   return (
     <section className="event-workspace">
       <Link className="ghost back-button" to="/">Zurück zum Dashboard</Link>
@@ -2136,8 +2177,8 @@ function EventWorkspace({
                   <button
                     className="ghost"
                     type="button"
-                    onClick={saveEventAsTemplate}
-                    title="Speichert Motto, Zielgruppe, Gästezahl, Arbeitsbereiche, Unteraufgaben, Infrastruktur, Zeitplan, Budget und Wiki als neue Vorlage. Team, Dateien, Kommentare, Fotos und konkrete Verantwortliche werden nicht übernommen."
+                    onClick={openTemplateAssistant}
+                    title="Öffnet einen Assistenten. Dort wählst du aus, welche Teile dieses Events als wiederverwendbare Vorlage gespeichert werden."
                   >
                     <Save size={16} /> Als Vorlage speichern
                   </button>
@@ -2526,6 +2567,75 @@ Absprachen: 45 Minuten Set, Rechnung folgt`}
             </section>
           </section>
         </>
+      )}
+      {templateDraft && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(click) => {
+          if (click.target === click.currentTarget) setTemplateDraft(null)
+        }}>
+          <section className="template-modal" role="dialog" aria-modal="true" aria-labelledby="template-dialog-title">
+            <div className="section-head">
+              <div>
+                <h2 id="template-dialog-title">Event als Vorlage speichern</h2>
+                <p className="help-text">Wähle aus, welche Teile dieses Events als wiederverwendbare Blaupause gespeichert werden. Persönliche Daten, Dateien und Kommentare bleiben draußen.</p>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setTemplateDraft(null)} aria-label="Dialog schließen"><X size={16} /></button>
+            </div>
+            <div className="template-modal-grid">
+              <div className="template-modal-form">
+                <label className="field">
+                  <span>Name der Vorlage</span>
+                  <input
+                    value={templateDraft.name}
+                    onChange={(change) => setTemplateDraft({ ...templateDraft, name: change.target.value })}
+                    placeholder="z.B. Tanzabend"
+                  />
+                  <small className="help-text">Kurz und wiedererkennbar. Dieser Name erscheint später beim Event-Erstellen.</small>
+                </label>
+                <label className="field">
+                  <span>Info zur Vorlage</span>
+                  <textarea
+                    value={templateDraft.description}
+                    onChange={(change) => setTemplateDraft({ ...templateDraft, description: change.target.value })}
+                    placeholder="z.B. außen, überdacht, DJ, ca. 80 Gäste"
+                  />
+                  <small className="help-text">Beschreibe die Variante so, dass du sie später eindeutig wiedererkennst.</small>
+                </label>
+                <div className="template-option-list">
+                  <label><input type="checkbox" checked={templateDraft.includeBasics} onChange={(change) => setTemplateDraft({ ...templateDraft, includeBasics: change.target.checked })} /> Grunddaten übernehmen</label>
+                  <label><input type="checkbox" checked={templateDraft.includeActions} onChange={(change) => setTemplateDraft({ ...templateDraft, includeActions: change.target.checked })} /> Arbeitsbereiche und Unteraufgaben übernehmen</label>
+                  <label><input type="checkbox" checked={templateDraft.includeInfrastructure} onChange={(change) => setTemplateDraft({ ...templateDraft, includeInfrastructure: change.target.checked })} /> Infrastruktur übernehmen</label>
+                  <label><input type="checkbox" checked={templateDraft.includeRunsheet} onChange={(change) => setTemplateDraft({ ...templateDraft, includeRunsheet: change.target.checked })} /> Zeitplan übernehmen</label>
+                  <label className={!templateDraft.includeRunsheet ? 'muted-option' : ''}>
+                    <input
+                      type="checkbox"
+                      checked={templateDraft.includeRunsheetOwners}
+                      disabled={!templateDraft.includeRunsheet}
+                      onChange={(change) => setTemplateDraft({ ...templateDraft, includeRunsheetOwners: change.target.checked })}
+                    /> Verantwortliche im Zeitplan mit übernehmen
+                  </label>
+                  <label><input type="checkbox" checked={templateDraft.includeBudget} onChange={(change) => setTemplateDraft({ ...templateDraft, includeBudget: change.target.checked })} /> Budgetposten übernehmen</label>
+                  <label><input type="checkbox" checked={templateDraft.includeWiki} onChange={(change) => setTemplateDraft({ ...templateDraft, includeWiki: change.target.checked })} /> Wiki-Notizen übernehmen</label>
+                </div>
+              </div>
+              <aside className="template-preview">
+                <strong>Das landet in der Vorlage</strong>
+                <ul>
+                  <li>{templateDraft.includeBasics ? 'Motto, Zielgruppe und Gästezahl' : 'Keine Grunddaten'}</li>
+                  <li>{templateDraft.includeActions ? `${event.actions.length} Arbeitsbereich(e), ${templateTaskCount} Unteraufgabe(n)` : 'Keine Arbeitsbereiche'}</li>
+                  <li>{templateDraft.includeInfrastructure ? `${event.infrastructure.length} Infrastrukturpunkt(e)` : 'Keine Infrastruktur'}</li>
+                  <li>{templateDraft.includeRunsheet ? `${event.runsheet.length} Zeitplanpunkt(e)` : 'Kein Zeitplan'}</li>
+                  <li>{templateDraft.includeBudget ? `${event.budget.length} Budgetposten` : 'Kein Budget'}</li>
+                  <li>{templateDraft.includeWiki ? `${event.wiki.length} Wiki-Notiz(en)` : 'Keine Wiki-Notizen'}</li>
+                </ul>
+                <p className="help-text">Nicht übernommen werden: Teammitglieder, Dateien, Flyer, Fotos, Kommentare, erledigt/in Arbeit-Status und Aufgaben-Verantwortliche.</p>
+              </aside>
+            </div>
+            <div className="modal-actions">
+              <button className="ghost" type="button" onClick={() => setTemplateDraft(null)}>Abbrechen</button>
+              <button className="primary" type="button" onClick={saveEventAsTemplate}><Save size={16} /> Vorlage speichern</button>
+            </div>
+          </section>
+        </div>
       )}
     </section>
   )
