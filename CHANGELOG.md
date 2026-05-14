@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.42
+
+- Event-Erstellung in einen kompakten 3-Schritt-Assistenten mit Vorlagenkarten umgebaut.
+- Mobile Event-Navigation durch ein klares Bereichs-Dropdown ersetzt.
+- Helferansicht mit „Als Nächstes“-Karte und direkterem Aufgabenfokus verbessert.
+- Aufgaben zeigen jetzt Inline-Hinweise wie „überfällig“, „ohne Datum“ oder „ohne Verantwortliche“.
+- Leere Zustände enthalten passende Aktionsbuttons.
+- Adminbereich weiter verdichtet: Vorlagen und Auditlog liegen in Akkordeons.
+
 ## v0.4.41
 
 - Beim Speichern eines Events als Vorlage können Infrastruktur-Haken jetzt einzeln ausgewählt werden.

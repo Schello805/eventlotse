@@ -562,6 +562,81 @@ form {
   gap: 8px;
 }
 
+.create-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.create-steps button {
+  min-height: 34px;
+  border: 1px solid #dce6ef;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #52627a;
+  font-weight: 800;
+}
+
+.create-steps button.active {
+  border-color: #bfe5db;
+  background: #e7f4f1;
+  color: #0f766e;
+}
+
+.create-step-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.template-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.template-choice {
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dce6ef;
+  border-radius: 8px;
+  background: white;
+  text-align: left;
+}
+
+.template-choice.active {
+  border-color: #0f766e;
+  background: #f2fbf7;
+}
+
+.template-choice span,
+.template-choice small,
+.create-summary span {
+  color: #627084;
+}
+
+.create-summary,
+.validation-list {
+  padding: 10px;
+  display: grid;
+  gap: 5px;
+  border: 1px solid #dce6ef;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.validation-list {
+  border-color: #f3d49b;
+  background: #fff8eb;
+  color: #7a4d0b;
+}
+
+.validation-list span {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 .two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -828,6 +903,10 @@ form {
   border: 1px solid #dce2ea;
   border-radius: 8px;
   background: white;
+}
+
+.event-tab-select {
+  display: none;
 }
 
 .event-tabs button {
@@ -1519,6 +1598,21 @@ form {
   color: #627084;
 }
 
+.task-warning-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.task-warning-row span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .danger-chip {
   background: #fee2e2 !important;
   color: #b91c1c !important;
@@ -1589,6 +1683,20 @@ form {
 
 .info-strip strong {
   color: #0f5f59;
+}
+
+.next-helper-task {
+  margin-bottom: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 7px;
+  border: 1px solid #bfe5db;
+  border-radius: 8px;
+  background: #f2fbf7;
+}
+
+.next-helper-task strong {
+  font-size: 18px;
 }
 
 .runsheet-editor {
@@ -2365,22 +2473,22 @@ form {
   }
 
   .event-tabs {
+    display: none;
+  }
+
+  .event-tab-select {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    overflow: visible;
-    padding: 8px;
+    gap: 5px;
+    padding: 10px;
+    border: 1px solid #dce2ea;
+    border-radius: 8px;
+    background: white;
   }
 
-  .event-tabs button {
-    min-height: 44px;
-    justify-content: center;
-    padding: 8px 10px;
-    white-space: normal;
-  }
-
-  .event-tabs button:last-child {
-    grid-column: 1 / -1;
+  .event-tab-select span {
+    color: #627084;
+    font-size: 12px;
+    font-weight: 800;
   }
 
   .event-admin-actions {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { differenceInCalendarDays, format, isValid, parseISO } from 'date-fns'
@@ -823,6 +823,7 @@ function Dashboard({
   notify: (message: string, actionLabel?: string, onAction?: () => void) => void
 }) {
   const navigate = useNavigate()
+  const [createStep, setCreateStep] = useState(1)
   const eventForm = useForm<EventFormInput, unknown, EventFormValues>({
     resolver: zodResolver(eventFormSchema),
     defaultValues: {
@@ -835,6 +836,16 @@ function Dashboard({
       location: '',
     },
   })
+  const [selectedTemplateId, watchedDate, watchedGuests, watchedTargetGroup] = useWatch({
+    control: eventForm.control,
+    name: ['templateId', 'date', 'guests', 'targetGroup'],
+  })
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId)
+  const formHints = [
+    ...(watchedDate && watchedDate < new Date().toISOString().slice(0, 10) ? ['Das Datum liegt in der Vergangenheit.'] : []),
+    ...(Number(watchedGuests || 0) > 0 && !watchedTargetGroup ? ['Gästezahl ist gesetzt, aber die Zielgruppe fehlt noch.'] : []),
+    ...(selectedTemplate?.createInfrastructureTasks === false ? ['Diese Vorlage setzt Infrastruktur-Haken, legt aber keine Infrastruktur-Aufgaben automatisch an.'] : []),
+  ]
   const userCount = new Set(events.flatMap((event) => event.members.map((member) => member.email))).size
   const locationCount = new Set(events.map((event) => event.location).filter(Boolean)).size
   const activeEvents = events.filter((event) => !event.archived)
@@ -857,6 +868,8 @@ function Dashboard({
     eventForm.reset()
     notify(`Event "${event.name}" ist bereit. Ergänze jetzt Aufgaben oder Team.`, 'Event öffnen', () => navigate(`/events/${event.id}`))
   }
+
+  const goToCreateStep = (step: number) => setCreateStep(Math.min(3, Math.max(1, step)))
 
   if (!session.authenticated) {
     return <LoginRequired />
@@ -893,48 +906,100 @@ function Dashboard({
             <p className="help-text">Dein Konto darf aktuell keine neuen Events erstellen. Ein Admin kann dich zu Events einladen oder die Erstellung im Adminbereich freischalten.</p>
           )}
           <form onSubmit={eventForm.handleSubmit(submitEvent)} aria-disabled={!canCreateEvents}>
-            <label className="field">
-              <span>Vorlage</span>
-              <select {...eventForm.register('templateId')} disabled={!canCreateEvents}>
-                <option value="">Ohne Vorlage starten</option>
-                {templates.map((template) => (
-                  <option value={template.id} key={template.id}>{template.name}</option>
-                ))}
-              </select>
-              <small className="help-text">
-                Optional. Die Vorlage wird nur beim Erstellen kopiert: Arbeitsbereiche, Unteraufgaben, Infrastruktur, Zeitplan, Budget und Wiki starten vorbefüllt.
-                Spätere Änderungen am Event ändern die Vorlage nicht automatisch.
-              </small>
-            </label>
-            <label className="field">
-              <span>Eventname</span>
-              <input placeholder="z.B. Hoffest, Geburtstag, Vereinsabend" disabled={!canCreateEvents} {...eventForm.register('name')} />
-              {eventForm.formState.errors.name && <small className="form-error">{eventForm.formState.errors.name.message}</small>}
-            </label>
-            <label className="field">
-              <span>Motto</span>
-              <input placeholder="z.B. Akustikabend im Innenhof" disabled={!canCreateEvents} {...eventForm.register('motto')} />
-              <small className="help-text">Optional. Eine kurze Beschreibung reicht völlig.</small>
-            </label>
-            <label className="field">
-              <span>Zielgruppe</span>
-              <input placeholder="z.B. Familie, Freunde, Nachbarschaft" disabled={!canCreateEvents} {...eventForm.register('targetGroup')} />
-            </label>
-            <div className="two-col">
-              <label className="field">
-                <span>Gäste grob geschätzt</span>
-                <input type="number" min="0" placeholder="0" disabled={!canCreateEvents} {...eventForm.register('guests', { valueAsNumber: true })} />
-              </label>
-              <label className="field">
-                <span>Datum</span>
-                <input type="date" disabled={!canCreateEvents} {...eventForm.register('date')} />
-              </label>
+            <div className="create-steps" aria-label="Event-Erstellung">
+              {[1, 2, 3].map((step) => (
+                <button className={createStep === step ? 'active' : ''} type="button" key={step} onClick={() => goToCreateStep(step)}>
+                  {step}. {step === 1 ? 'Basis' : step === 2 ? 'Vorlage' : 'Prüfen'}
+                </button>
+              ))}
             </div>
-            <label className="field">
-              <span>Ort</span>
-              <input placeholder="z.B. Alter Hof, Vereinsheim, Garten" disabled={!canCreateEvents} {...eventForm.register('location')} />
-            </label>
-            <button className="primary" type="submit" disabled={!canCreateEvents}><Plus size={16} /> Anlegen</button>
+
+            {createStep === 1 && (
+              <div className="create-step-panel">
+                <label className="field">
+                  <span>Eventname</span>
+                  <input placeholder="z.B. Hoffest, Geburtstag, Vereinsabend" disabled={!canCreateEvents} {...eventForm.register('name')} />
+                  {eventForm.formState.errors.name && <small className="form-error">{eventForm.formState.errors.name.message}</small>}
+                </label>
+                <label className="field">
+                  <span>Motto</span>
+                  <input placeholder="z.B. Akustikabend im Innenhof" disabled={!canCreateEvents} {...eventForm.register('motto')} />
+                  <small className="help-text">Optional. Eine kurze Beschreibung reicht völlig.</small>
+                </label>
+                <div className="two-col">
+                  <label className="field">
+                    <span>Datum</span>
+                    <input type="date" disabled={!canCreateEvents} {...eventForm.register('date')} />
+                  </label>
+                  <label className="field">
+                    <span>Ort</span>
+                    <input placeholder="z.B. Alter Hof, Vereinsheim, Garten" disabled={!canCreateEvents} {...eventForm.register('location')} />
+                  </label>
+                </div>
+                <button className="ghost" type="button" onClick={() => goToCreateStep(2)} disabled={!canCreateEvents}>Weiter zur Vorlage</button>
+              </div>
+            )}
+
+            {createStep === 2 && (
+              <div className="create-step-panel">
+                <input type="hidden" {...eventForm.register('templateId')} />
+                <div className="template-picker">
+                  <button
+                    className={!selectedTemplateId ? 'template-choice active' : 'template-choice'}
+                    type="button"
+                    onClick={() => eventForm.setValue('templateId', '')}
+                    disabled={!canCreateEvents}
+                  >
+                    <strong>Ohne Vorlage</strong>
+                    <span>Leeres Event, du baust Arbeitsbereiche später selbst auf.</span>
+                  </button>
+                  {templates.map((template) => (
+                    <button
+                      className={selectedTemplateId === template.id ? 'template-choice active' : 'template-choice'}
+                      type="button"
+                      key={template.id}
+                      onClick={() => eventForm.setValue('templateId', template.id)}
+                      disabled={!canCreateEvents}
+                    >
+                      <strong>{template.name}</strong>
+                      <span>{template.description || 'Keine Beschreibung hinterlegt.'}</span>
+                      <small>{template.actions.length} Aktionen · {template.infrastructure.length} Infrastruktur · {template.runsheet.length} Zeitplan</small>
+                    </button>
+                  ))}
+                </div>
+                <small className="help-text">Die Vorlage wird beim Erstellen einmalig kopiert. Danach ist das Event unabhängig von der Vorlage.</small>
+                <div className="button-row">
+                  <button className="ghost" type="button" onClick={() => goToCreateStep(1)}>Zurück</button>
+                  <button className="ghost" type="button" onClick={() => goToCreateStep(3)} disabled={!canCreateEvents}>Weiter zur Prüfung</button>
+                </div>
+              </div>
+            )}
+
+            {createStep === 3 && (
+              <div className="create-step-panel">
+                <label className="field">
+                  <span>Zielgruppe</span>
+                  <input placeholder="z.B. Familie, Freunde, Nachbarschaft" disabled={!canCreateEvents} {...eventForm.register('targetGroup')} />
+                </label>
+                <label className="field">
+                  <span>Gäste grob geschätzt</span>
+                  <input type="number" min="0" placeholder="0" disabled={!canCreateEvents} {...eventForm.register('guests', { valueAsNumber: true })} />
+                </label>
+                <div className="create-summary">
+                  <strong>{selectedTemplate ? `Start mit Vorlage "${selectedTemplate.name}"` : 'Start ohne Vorlage'}</strong>
+                  <span>{selectedTemplate ? `${selectedTemplate.actions.length} Aktionen, ${selectedTemplate.infrastructure.length} Infrastrukturpunkte und ${selectedTemplate.runsheet.length} Zeitplanpunkte werden vorbereitet.` : 'Du startest mit einem leeren Event und ergänzt Aufgaben später.'}</span>
+                </div>
+                {formHints.length > 0 && (
+                  <div className="validation-list">
+                    {formHints.map((hint) => <span key={hint}><CircleHelp size={14} /> {hint}</span>)}
+                  </div>
+                )}
+                <div className="button-row">
+                  <button className="ghost" type="button" onClick={() => goToCreateStep(2)}>Zurück</button>
+                  <button className="primary" type="submit" disabled={!canCreateEvents}><Plus size={16} /> Event anlegen</button>
+                </div>
+              </div>
+            )}
           </form>
         </section>
 
@@ -948,7 +1013,9 @@ function Dashboard({
           {activeEvents.length === 0 ? (
             <EmptyState
               title="Noch keine Events"
-              text="Lege dein erstes Event links im Akkordeon an. Danach erscheinen hier die Arbeitskarten."
+              text="Lege dein erstes Event im Formular an. Danach erscheinen hier die Arbeitskarten."
+              actionLabel="Mit Basisdaten starten"
+              onAction={() => goToCreateStep(1)}
             />
           ) : (
             <div className="event-card-grid">
@@ -1601,6 +1668,7 @@ function MyTasksPanel({
   updateTask: (actionId: string, taskId: string, patch: Partial<Task>) => void
 }) {
   const openTasks = tasks.filter((task) => task.status !== 'done')
+  const nextTask = [...openTasks].sort((a, b) => (a.due || '9999-12-31').localeCompare(b.due || '9999-12-31'))[0]
 
   return (
     <section className="panel helper-focus-panel">
@@ -1612,14 +1680,27 @@ function MyTasksPanel({
         <CheckCircle2 size={18} />
       </div>
       {openTasks.length === 0 ? (
-        <EmptyState title="Keine offenen Aufgaben für dich" text="Wenn dir später etwas zugewiesen wird, erscheint es hier automatisch." />
+        <EmptyState title="Keine offenen Aufgaben für dich" text="Wenn dir später etwas zugewiesen wird, erscheint es hier automatisch." actionLabel="Eventübersicht öffnen" onAction={() => setActiveTab('overview')} />
       ) : (
-        <div className="helper-task-list">
-          {openTasks.map((task) => (
+        <>
+          {nextTask && (
+            <div className="next-helper-task">
+              <span className="eyebrow">Als Nächstes</span>
+              <strong>{nextTask.title}</strong>
+              <small>{nextTask.actionTitle} · fällig {formatDate(nextTask.due)} · {statusLabel(nextTask.status)}</small>
+              <button className="primary" type="button" onClick={() => {
+                onOpenTask(nextTask.actionId)
+                setActiveTab('tasks')
+              }}>Aufgabe öffnen</button>
+            </div>
+          )}
+          <div className="helper-task-list">
+            {openTasks.map((task) => (
             <article className={task.due && task.due < new Date().toISOString().slice(0, 10) ? 'helper-task overdue' : 'helper-task'} key={task.id}>
               <div>
                 <span className="eyebrow">{task.actionTitle}</span>
                 <strong>{task.title}</strong>
+                {task.notes && <p className="help-text">{task.notes}</p>}
                 <small>Fällig: {formatDate(task.due)} · {statusLabel(task.status)}</small>
               </div>
               <div className="helper-task-actions">
@@ -1631,8 +1712,9 @@ function MyTasksPanel({
                 <button className="ghost" type="button" onClick={() => onOpenTask(task.actionId)}>Details öffnen</button>
               </div>
             </article>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
       <button className="ghost" type="button" onClick={() => setActiveTab('overview')}>Gesamtes Event ansehen</button>
     </section>
@@ -2129,6 +2211,13 @@ function EventWorkspace({
     ? event.actions.filter((action) => action.category === 'Infrastruktur' && templateDraft.infrastructureItems.includes(action.title))
     : []
   const selectedInfrastructureTaskCount = selectedInfrastructureActions.reduce((count, action) => count + action.tasks.length, 0)
+  const eventTabs: Array<{ id: EventTab; label: string; badge?: number }> = [
+    { id: 'overview', label: 'Übersicht' },
+    { id: 'tasks', label: 'Aufgaben', badge: openTaskCount },
+    { id: 'team', label: 'Team' },
+    { id: 'infrastructure', label: 'Infrastruktur' },
+    { id: 'schedule', label: 'Ablauf' },
+  ]
 
   return (
     <section className="event-workspace">
@@ -2160,12 +2249,18 @@ function EventWorkspace({
 
       <NextSteps event={event} isAdmin={isAdmin} setActiveTab={setActiveTab} />
 
+      <label className="event-tab-select">
+        <span>Bereich</span>
+        <select value={activeTab} onChange={(change) => setActiveTab(change.target.value as EventTab)}>
+          {eventTabs.map((tab) => <option value={tab.id} key={tab.id}>{tab.label}{tab.badge ? ` (${tab.badge})` : ''}</option>)}
+        </select>
+      </label>
       <div className="event-tabs" role="tablist" aria-label="Eventbereiche">
-        <button className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>Übersicht</button>
-        <button className={activeTab === 'tasks' ? 'active' : ''} onClick={() => setActiveTab('tasks')}>Aufgaben <span>{openTaskCount}</span></button>
-        <button className={activeTab === 'team' ? 'active' : ''} onClick={() => setActiveTab('team')}>Team</button>
-        <button className={activeTab === 'infrastructure' ? 'active' : ''} onClick={() => setActiveTab('infrastructure')}>Infrastruktur</button>
-        <button className={activeTab === 'schedule' ? 'active' : ''} onClick={() => setActiveTab('schedule')}>Ablauf</button>
+        {eventTabs.map((tab) => (
+          <button className={activeTab === tab.id ? 'active' : ''} key={tab.id} onClick={() => setActiveTab(tab.id)}>
+            {tab.label} {typeof tab.badge === 'number' && <span>{tab.badge}</span>}
+          </button>
+        ))}
       </div>
 
       {activeTab === 'overview' && (
@@ -2318,6 +2413,8 @@ function EventWorkspace({
             <EmptyState
               title="Noch keine Arbeitsbereiche"
               text="Wähle oben passende Arbeitsbereiche aus. Danach entsteht hier dein Aufgaben-Dashboard."
+              actionLabel="Arbeitsbereiche anzeigen"
+              onAction={() => setActiveTab('tasks')}
             />
           ) : (
             <>
@@ -2517,7 +2614,7 @@ function EventWorkspace({
                 </div>
               </div>
               {event.runsheet.length === 0 ? (
-                <EmptyState title="Noch kein Ablaufplan" text="Lege die wichtigsten Zeiten für Aufbau, Einlass, Programmpunkte und Abbau an." />
+                <EmptyState title="Noch kein Ablaufplan" text="Lege die wichtigsten Zeiten für Aufbau, Einlass, Programmpunkte und Abbau an." actionLabel="Ersten Zeitpunkt vorschlagen" onAction={() => setRunDraft((current) => ({ ...current, time: current.time || '18:00' }))} />
               ) : (
                 <div className="runsheet-editor">
                   {event.runsheet.map((item, index) => (
@@ -2909,7 +3006,8 @@ function AdminPage({
           </div>
         </details>
 
-        <section className="panel admin-panel span-2">
+        <details className="panel admin-panel accordion-panel span-2">
+          <summary><span>Vorlagen</span><ClipboardList size={18} /></summary>
           <div className="section-head">
             <div>
               <h2>Template Store</h2>
@@ -2983,9 +3081,10 @@ function AdminPage({
             </small>
           </label>
           <button className="primary" type="button" onClick={saveTemplateJson} disabled={!templateJson.trim()}><Save size={16} /> JSON speichern</button>
-        </section>
+        </details>
 
-        <section className="panel admin-panel span-2">
+        <details className="panel admin-panel accordion-panel span-2">
+          <summary><span>Auditlog & Erinnerungen</span><Bell size={18} /></summary>
           <div className="section-head">
             <h2>Auditlog</h2>
             <HelpHint text="Nachvollziehbare Liste wichtiger Änderungen wie Benutzeraktionen, Passwort-Reset und Systemkonfiguration." />
@@ -3003,7 +3102,7 @@ function AdminPage({
               </li>
             ))}
           </ul>
-        </section>
+        </details>
       </div>
       {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
     </section>
@@ -3048,6 +3147,12 @@ function ActionBoard({
     if (taskFilter === 'unassigned') return task.status !== 'done' && task.ownerIds.length === 0
     return true
   }
+  const taskWarnings = (task: Task) => [
+    ...(task.status !== 'done' && task.due && task.due < today ? ['überfällig'] : []),
+    ...(task.status !== 'done' && !task.due ? ['ohne Datum'] : []),
+    ...(task.status !== 'done' && task.ownerIds.length === 0 ? ['ohne Verantwortliche'] : []),
+    ...(task.status !== 'done' && task.due && action.deadline && task.due > action.deadline ? ['nach Bereichsfrist'] : []),
+  ]
   const addTask = () => {
     const title = taskDraft.what.trim() || 'Neue Unteraufgabe'
     const doneWhen = taskDraft.doneWhen.trim()
@@ -3154,6 +3259,10 @@ function ActionBoard({
               <p className="lane-empty">{emptyLaneText(status)}</p>
             )}
             {action.tasks.filter((task) => task.status === status && taskMatchesFilter(task)).map((task) => (
+              (() => {
+                const warnings = taskWarnings(task)
+                const ownerName = members.find((member) => member.id === task.ownerIds[0])?.name || 'ohne Verantwortliche'
+                return (
               <div
                 className={task.status !== 'done' && task.due && task.due < today ? 'task-card overdue' : 'task-card'}
                 id={`task-${task.id}`}
@@ -3185,9 +3294,14 @@ function ActionBoard({
                 />
                 <div className="task-meta-row">
                   <small>Fällig: {formatDate(task.due)}</small>
-                  <small>{members.find((member) => member.id === task.ownerIds[0])?.name || 'ohne Verantwortliche'}</small>
+                  <small>{ownerName}</small>
                   {task.status !== 'done' && task.due && task.due < today && <small className="danger-chip">Überfällig</small>}
                 </div>
+                {warnings.length > 0 && (
+                  <div className="task-warning-row">
+                    {warnings.map((warning) => <span key={warning}>{warning}</span>)}
+                  </div>
+                )}
                 {canEdit && (
                   <div className="mobile-status-buttons" aria-label="Aufgabe verschieben">
                     {(['todo', 'doing', 'done'] as Status[]).map((nextStatus) => (
@@ -3326,6 +3440,8 @@ Terminiert: Bis wann?`}
                   />
                 </label>
               </div>
+                )
+              })()
             ))}
           </div>
         ))}
@@ -3503,11 +3619,12 @@ function HelpHint({ text }: { text: string }) {
   )
 }
 
-function EmptyState({ title, text }: { title: string; text: string }) {
+function EmptyState({ title, text, actionLabel, onAction }: { title: string; text: string; actionLabel?: string; onAction?: () => void }) {
   return (
     <div className="empty-card">
       <strong>{title}</strong>
       <p>{text}</p>
+      {actionLabel && onAction && <button className="ghost" type="button" onClick={onAction}>{actionLabel}</button>}
     </div>
   )
 }

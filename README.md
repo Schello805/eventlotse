@@ -6,12 +6,13 @@ Repository: https://github.com/Schello805/eventlotse
 
 ## Status
 
-Rev. `v0.4.41` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, feineren Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.4.42` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, feineren Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
 - Login mit Admin- und Helfer-Rollen im Node/PostgreSQL-Backend
 - Event-Übersicht mit Event-Steckbrief, Motto, Zielgruppe, Gästezahl und Ort
+- Event-Erstellung als kompakter Assistent mit Vorlagenkarten und Prüfung
 - kompakter Steckbrief-Kopf mit nahem Hilfe-Icon und platzsparendem Export-Dropdown
 - Arbeitsbereich-Katalog mit typischen Event-Bausteinen wie Aufbau, Abbau, Musik, Flyer, Einladungen, Technik, Catering und GEMA
 - Event-Templates für wiederkehrende Abläufe wie Hochzeit, Tanzevent oder Vereinsfest, inklusive JSON-Import und JSON-Export im Adminbereich
@@ -20,7 +21,7 @@ Rev. `v0.4.41` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serv
 - normalisierte PostgreSQL-Tabellen für Aktionen, Aufgaben, Infrastruktur, Zeitplan und Budget als stabile Datenbasis
 - feinere Bearbeitungsrechte: Helfer bearbeiten nur verantwortete Arbeitsbereiche oder eigene Unteraufgaben
 - klare Aufgaben-Akkordeons, bei denen immer nur ein Arbeitsbereich geöffnet ist
-- Setup-Checkliste für Event-Ersteller und reduzierte Helferansicht „Meine Aufgaben“
+- Setup-Checkliste für Event-Ersteller und reduzierte Helferansicht „Meine Aufgaben“ mit nächster Aufgabe
 - SMART-orientiertes Anlegen neuer Unteraufgaben
 - Aufgaben-Benachrichtigungen per E-Mail mit direktem Link zur Aufgabe
 - eventbezogene Teamverwaltung per E-Mail, Name, Funktion/Kommentar und Entfernen aus dem Event
