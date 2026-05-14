@@ -1932,6 +1932,37 @@ form {
   background: #fbfcfd;
 }
 
+.template-subsection {
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dce6ef;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.template-subsection strong {
+  color: #172033;
+}
+
+.template-infrastructure-list {
+  display: grid;
+  gap: 6px;
+}
+
+.template-infrastructure-list label {
+  background: white;
+}
+
+.template-infrastructure-list span {
+  font-weight: 700;
+}
+
+.template-infrastructure-list small {
+  margin-left: auto;
+  color: #627084;
+}
+
 .muted-option {
   color: #7b8798;
   background: #f3f6f9 !important;

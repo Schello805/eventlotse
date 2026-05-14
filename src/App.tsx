@@ -125,6 +125,7 @@ type EventTemplate = {
   motto?: string
   targetGroup?: string
   guests?: number
+  createInfrastructureTasks?: boolean
   actions: { title: string; category: string; tasks: string[] }[]
   infrastructure: string[]
   runsheet: { time: string; title: string; owner: string }[]
@@ -137,7 +138,8 @@ type TemplateDraft = {
   description: string
   includeBasics: boolean
   includeActions: boolean
-  includeInfrastructure: boolean
+  infrastructureItems: string[]
+  includeInfrastructureTasks: boolean
   includeRunsheet: boolean
   includeRunsheetOwners: boolean
   includeBudget: boolean
@@ -496,6 +498,7 @@ function normalizeTemplate(template: Partial<EventTemplate> = {}): EventTemplate
     motto: template.motto || '',
     targetGroup: template.targetGroup || '',
     guests: Number(template.guests || 0),
+    createInfrastructureTasks: template.createInfrastructureTasks !== false,
     actions: Array.isArray(template.actions)
       ? template.actions.map((action) => ({
           title: String(action.title || 'Aufgabe').trim(),
@@ -680,7 +683,7 @@ function App() {
         comments: [],
       })),
     })) || []
-    const templateInfrastructureActions = (template?.infrastructure || [])
+    const templateInfrastructureActions = template?.createInfrastructureTasks === false ? [] : (template?.infrastructure || [])
       .filter((item) => !templateActions.some((action) => action.title === item && action.category === 'Infrastruktur'))
       .map((item) => buildInfrastructureActionCard(item, data.date || '', memberId))
     const next: EventPlan = {
@@ -1909,7 +1912,8 @@ function EventWorkspace({
       description: event.motto ? `${event.motto}` : `Aus dem Event "${event.name}" gespeichert.`,
       includeBasics: true,
       includeActions: true,
-      includeInfrastructure: true,
+      infrastructureItems: event.infrastructure,
+      includeInfrastructureTasks: true,
       includeRunsheet: true,
       includeRunsheetOwners: false,
       includeBudget: true,
@@ -1924,6 +1928,16 @@ function EventWorkspace({
       notify('Bitte gib einen Namen für die Vorlage ein.')
       return
     }
+    const templateActionsFromEvent = event.actions
+      .filter((action) =>
+        (action.category !== 'Infrastruktur' && templateDraft.includeActions)
+        || (action.category === 'Infrastruktur' && templateDraft.includeInfrastructureTasks && templateDraft.infrastructureItems.includes(action.title)),
+      )
+      .map((action) => ({
+        title: action.title,
+        category: action.category,
+        tasks: action.tasks.map((task) => task.title).filter(Boolean),
+      }))
     const template: EventTemplate = {
       id: `template-${slugify(name)}-${Date.now()}`,
       name,
@@ -1931,14 +1945,9 @@ function EventWorkspace({
       motto: templateDraft.includeBasics ? event.motto : '',
       targetGroup: templateDraft.includeBasics ? event.targetGroup : '',
       guests: templateDraft.includeBasics ? event.guests : 0,
-      actions: templateDraft.includeActions
-        ? event.actions.map((action) => ({
-          title: action.title,
-          category: action.category,
-          tasks: action.tasks.map((task) => task.title).filter(Boolean),
-        }))
-        : [],
-      infrastructure: templateDraft.includeInfrastructure ? event.infrastructure : [],
+      createInfrastructureTasks: templateDraft.includeInfrastructureTasks,
+      actions: templateActionsFromEvent,
+      infrastructure: templateDraft.infrastructureItems,
       runsheet: templateDraft.includeRunsheet
         ? event.runsheet.map((item) => ({ time: item.time, title: item.title, owner: templateDraft.includeRunsheetOwners ? item.owner : '' }))
         : [],
@@ -2114,7 +2123,12 @@ function EventWorkspace({
     notify(`Hauptverantwortung für "${item}" wurde aktualisiert.`)
   }
 
-  const templateTaskCount = event.actions.reduce((count, action) => count + action.tasks.length, 0)
+  const nonInfrastructureActions = event.actions.filter((action) => action.category !== 'Infrastruktur')
+  const templateTaskCount = nonInfrastructureActions.reduce((count, action) => count + action.tasks.length, 0)
+  const selectedInfrastructureActions = templateDraft
+    ? event.actions.filter((action) => action.category === 'Infrastruktur' && templateDraft.infrastructureItems.includes(action.title))
+    : []
+  const selectedInfrastructureTaskCount = selectedInfrastructureActions.reduce((count, action) => count + action.tasks.length, 0)
 
   return (
     <section className="event-workspace">
@@ -2603,7 +2617,44 @@ Absprachen: 45 Minuten Set, Rechnung folgt`}
                 <div className="template-option-list">
                   <label><input type="checkbox" checked={templateDraft.includeBasics} onChange={(change) => setTemplateDraft({ ...templateDraft, includeBasics: change.target.checked })} /> Grunddaten übernehmen</label>
                   <label><input type="checkbox" checked={templateDraft.includeActions} onChange={(change) => setTemplateDraft({ ...templateDraft, includeActions: change.target.checked })} /> Arbeitsbereiche und Unteraufgaben übernehmen</label>
-                  <label><input type="checkbox" checked={templateDraft.includeInfrastructure} onChange={(change) => setTemplateDraft({ ...templateDraft, includeInfrastructure: change.target.checked })} /> Infrastruktur übernehmen</label>
+                  <div className="template-subsection">
+                    <strong>Infrastruktur einzeln übernehmen</strong>
+                    <small className="help-text">Wähle nur die Haken aus, die zu dieser Vorlagen-Variante gehören.</small>
+                    {event.infrastructure.length === 0 ? (
+                      <p className="help-text">In diesem Event sind noch keine Infrastruktur-Haken gesetzt.</p>
+                    ) : (
+                      <div className="template-infrastructure-list">
+                        {event.infrastructure.map((item) => {
+                          const checked = templateDraft.infrastructureItems.includes(item)
+                          const action = event.actions.find((entry) => entry.category === 'Infrastruktur' && entry.title === item)
+                          return (
+                            <label key={item}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(change) => setTemplateDraft({
+                                  ...templateDraft,
+                                  infrastructureItems: change.target.checked
+                                    ? [...templateDraft.infrastructureItems.filter((entry) => entry !== item), item]
+                                    : templateDraft.infrastructureItems.filter((entry) => entry !== item),
+                                })}
+                              />
+                              <span>{item}</span>
+                              <small>{action ? `${action.tasks.length} Aufgabe(n) vorhanden` : 'noch kein Aufgabenpaket'}</small>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <label className={templateDraft.infrastructureItems.length === 0 ? 'muted-option' : ''}>
+                    <input
+                      type="checkbox"
+                      checked={templateDraft.includeInfrastructureTasks}
+                      disabled={templateDraft.infrastructureItems.length === 0}
+                      onChange={(change) => setTemplateDraft({ ...templateDraft, includeInfrastructureTasks: change.target.checked })}
+                    /> Aufgaben der gewählten Infrastruktur-Haken übernehmen
+                  </label>
                   <label><input type="checkbox" checked={templateDraft.includeRunsheet} onChange={(change) => setTemplateDraft({ ...templateDraft, includeRunsheet: change.target.checked })} /> Zeitplan übernehmen</label>
                   <label className={!templateDraft.includeRunsheet ? 'muted-option' : ''}>
                     <input
@@ -2621,8 +2672,9 @@ Absprachen: 45 Minuten Set, Rechnung folgt`}
                 <strong>Das landet in der Vorlage</strong>
                 <ul>
                   <li>{templateDraft.includeBasics ? 'Motto, Zielgruppe und Gästezahl' : 'Keine Grunddaten'}</li>
-                  <li>{templateDraft.includeActions ? `${event.actions.length} Arbeitsbereich(e), ${templateTaskCount} Unteraufgabe(n)` : 'Keine Arbeitsbereiche'}</li>
-                  <li>{templateDraft.includeInfrastructure ? `${event.infrastructure.length} Infrastrukturpunkt(e)` : 'Keine Infrastruktur'}</li>
+                  <li>{templateDraft.includeActions ? `${nonInfrastructureActions.length} Arbeitsbereich(e), ${templateTaskCount} Unteraufgabe(n)` : 'Keine Arbeitsbereiche'}</li>
+                  <li>{templateDraft.infrastructureItems.length ? `${templateDraft.infrastructureItems.length} Infrastruktur-Haken` : 'Keine Infrastruktur-Haken'}</li>
+                  <li>{templateDraft.includeInfrastructureTasks && selectedInfrastructureActions.length ? `${selectedInfrastructureActions.length} Infrastruktur-Aufgabenpaket(e), ${selectedInfrastructureTaskCount} Aufgabe(n)` : 'Keine Infrastruktur-Aufgaben'}</li>
                   <li>{templateDraft.includeRunsheet ? `${event.runsheet.length} Zeitplanpunkt(e)` : 'Kein Zeitplan'}</li>
                   <li>{templateDraft.includeBudget ? `${event.budget.length} Budgetposten` : 'Kein Budget'}</li>
                   <li>{templateDraft.includeWiki ? `${event.wiki.length} Wiki-Notiz(en)` : 'Keine Wiki-Notizen'}</li>

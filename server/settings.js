@@ -41,6 +41,7 @@ export function normalizeEventTemplate(template = {}) {
     motto: String(template.motto || '').trim().slice(0, 120),
     targetGroup: String(template.targetGroup || '').trim().slice(0, 160),
     guests: Number.isFinite(Number(template.guests)) ? Math.max(0, Number(template.guests)) : 0,
+    createInfrastructureTasks: template.createInfrastructureTasks !== false,
     actions: Array.isArray(template.actions)
       ? template.actions.slice(0, 40).map((action = {}) => ({
           title: String(action.title || 'Aufgabe').trim().slice(0, 100),

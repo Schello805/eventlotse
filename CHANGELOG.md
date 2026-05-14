@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.41
+
+- Beim Speichern eines Events als Vorlage können Infrastruktur-Haken jetzt einzeln ausgewählt werden.
+- Infrastruktur-Aufgabenpakete können getrennt von den Haken übernommen oder weggelassen werden.
+- Vorlagen merken sich, ob Infrastruktur-Aufgaben beim nächsten Event automatisch mit angelegt werden sollen.
+
 ## v0.4.40
 
 - „Als Vorlage speichern“ öffnet jetzt einen Assistenten statt sofort zu speichern.
