@@ -542,6 +542,7 @@ function loadEvents() {
 
 function App() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [events, setEvents] = useLocalStorage<EventPlan[]>(storageKey, loadEvents())
   const [settings, setSettings] = useLocalStorage<AppSettings>(settingsStorageKey, defaultSettings)
   const [eventTemplates, setEventTemplates] = useLocalStorage<EventTemplate[]>(templateStorageKey, builtInEventTemplates)
@@ -561,6 +562,7 @@ function App() {
   const [loginPassword, setLoginPassword] = useState('')
   const [toast, setToast] = useState<ToastState>(null)
   const [saveState, setSaveState] = useState<SaveState>('idle')
+  const [remoteReady, setRemoteReady] = useState(false)
 
   useEffect(() => {
     const normalizedEvents = events.map(normalizeEvent)
@@ -584,11 +586,15 @@ function App() {
     fetch('/api/me', { credentials: 'include' })
       .then((response) => (response.ok ? response.json() : null))
       .then(async (data) => {
-        if (!data?.user) return
-        setSession({ email: data.user.email, name: data.user.name || '', profileNote: data.user.profileNote || '', role: normalizeRole(data.user.role), authenticated: true })
+        if (!data?.user) {
+          setRemoteReady(true)
+          return
+        }
         await loadRemoteData()
+        setSession({ email: data.user.email, name: data.user.name || '', profileNote: data.user.profileNote || '', role: normalizeRole(data.user.role), authenticated: true })
+        setRemoteReady(true)
       })
-      .catch(() => undefined)
+      .catch(() => setRemoteReady(true))
   }, [loadRemoteData])
 
   const addAudit = (action: string) => {
@@ -630,6 +636,7 @@ function App() {
 
   const login = async () => {
     try {
+      setRemoteReady(false)
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -638,11 +645,14 @@ function App() {
       })
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.message || 'Login fehlgeschlagen. Prüfe E-Mail, Passwort und Serverstatus.')
-      setSession({ email: data.user.email, name: data.user.name || '', profileNote: data.user.profileNote || '', role: normalizeRole(data.user.role), authenticated: true })
       setLoginPassword('')
       await loadRemoteData()
+      setSession({ email: data.user.email, name: data.user.name || '', profileNote: data.user.profileNote || '', role: normalizeRole(data.user.role), authenticated: true })
+      setRemoteReady(true)
+      if (location.pathname !== '/') navigate(`${location.pathname}${location.search}`, { replace: true })
       notify('Anmeldung erfolgreich.')
     } catch (error) {
+      setRemoteReady(true)
       notify(error instanceof Error ? error.message : 'Anmeldung nicht möglich. Bitte Server und Zugangsdaten prüfen.')
     }
   }
@@ -784,6 +794,7 @@ function App() {
                 templates={eventTemplates}
                 setTemplates={setEventTemplates}
                 session={session}
+                remoteReady={remoteReady}
                 saveState={saveState}
                 updateEvent={updateEvent}
                 deleteEvent={deleteEvent}
@@ -1084,6 +1095,7 @@ function AuthControl({
   login: () => void
   logout: () => void
 }) {
+  const location = useLocation()
   if (session.authenticated) {
     return (
       <div className="auth-status" aria-label="Angemeldeter Benutzer">
@@ -1096,7 +1108,7 @@ function AuthControl({
   }
 
   return (
-    <details className="auth-menu">
+    <details className="auth-menu" open={location.pathname !== '/'}>
       <summary><Lock size={14} /> Anmelden</summary>
       <form
         className="auth-menu-panel"
@@ -1506,6 +1518,7 @@ function EventRoute({
   templates,
   setTemplates,
   session,
+  remoteReady,
   saveState,
   updateEvent,
   deleteEvent,
@@ -1515,6 +1528,7 @@ function EventRoute({
   templates: EventTemplate[]
   setTemplates: (templates: EventTemplate[]) => void
   session: { email: string; role: Role; authenticated: boolean }
+  remoteReady: boolean
   saveState: SaveState
   updateEvent: (event: EventPlan) => void
   deleteEvent: (eventId: string) => void
@@ -1523,6 +1537,9 @@ function EventRoute({
   const { eventId } = useParams()
   if (!session.authenticated) {
     return <LoginRequired />
+  }
+  if (!remoteReady) {
+    return <section className="panel"><strong>Event wird geladen...</strong><p className="help-text">Einen Moment bitte, die Daten werden vom Server geholt.</p></section>
   }
   const event = events.find((entry) => entry.id === eventId)
 

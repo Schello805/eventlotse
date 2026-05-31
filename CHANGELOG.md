@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.43
+
+- Direktlinks aus Erinnerungs- und Aufgabenmails bleiben beim Login erhalten.
+- Bei geschützten Event-Links öffnet sich das Login-Menü automatisch.
+- Event-Routen warten nach Anmeldung auf die Serverdaten, statt vorschnell zum Dashboard zurückzuspringen.
+
 ## v0.4.42
 
 - Event-Erstellung in einen kompakten 3-Schritt-Assistenten mit Vorlagenkarten umgebaut.
