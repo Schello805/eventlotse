@@ -1145,7 +1145,12 @@ app.post('/api/admin/reminders/run', requireAuth, requireAdmin, async (request, 
 app.use('/uploads', requireAuth, express.static(config.uploadDir))
 if (fs.existsSync(distDir)) {
   app.use(express.static(distDir))
-  app.get('*splat', (_request, response) => response.sendFile(path.join(distDir, 'index.html')))
+  app.use((request, response, next) => {
+    if (request.method !== 'GET') return next()
+    if (request.path.startsWith('/api/') || request.path.startsWith('/uploads/')) return next()
+    if (path.extname(request.path)) return next()
+    response.sendFile(path.join(distDir, 'index.html'))
+  })
 }
 
 app.use((error, _request, response, _next) => {

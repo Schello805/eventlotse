@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.44
+
+- Server-Fallback für React-Direktlinks robuster gemacht.
+- Event-Links wie `/events/<id>` liefern jetzt zuverlässig die App aus, statt an der Serverroute hängen zu bleiben.
+- API-, Upload- und echte Datei-Routen bleiben vom HTML-Fallback ausgenommen.
+
 ## v0.4.43
 
 - Direktlinks aus Erinnerungs- und Aufgabenmails bleiben beim Login erhalten.
