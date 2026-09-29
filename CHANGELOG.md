@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.1
+
+- Fehlende oder auf localhost zeigende PostgreSQL-Verbindungen werden beim Containerstart mit einer konkreten CapRover-Anleitung abgewiesen.
+- CapRover-Dokumentation auf aktuelle interne App-Hostnamen umgestellt.
+- Fehlerhilfe für `ECONNREFUSED 127.0.0.1:5432` und versehentlich zugeordnete Nginx-Standardseiten ergänzt.
+
 ## v0.5.0
 
 - CapRover-Deployment mit Dockerfile, `captain-definition`, Healthcheck und dokumentierter PostgreSQL-Anbindung ergänzt.

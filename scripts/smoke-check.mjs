@@ -29,4 +29,8 @@ assert.equal(versionJson.version, packageJson.version, 'dist/version.json passt 
 const html = fs.readFileSync(path.join(rootDir, 'dist/index.html'), 'utf8')
 assert.match(html, /<div id="root"><\/div>/, 'dist/index.html enthält keinen React-root')
 
+const containerEntrypoint = fs.readFileSync(path.join(rootDir, 'docker-entrypoint.sh'), 'utf8')
+assert.match(containerEntrypoint, /DATABASE_URL fehlt/, 'Containerstart prüft DATABASE_URL nicht')
+assert.match(containerEntrypoint, /localhost\|127\.0\.0\.1/, 'Containerstart blockiert lokale Datenbankziele nicht')
+
 console.log(`[Eventlotse] Smoke-Check erfolgreich für Version ${packageJson.version}.`)

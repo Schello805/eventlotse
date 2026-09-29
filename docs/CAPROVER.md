@@ -12,7 +12,7 @@ Eventlotse läuft in CapRover als eigene App. PostgreSQL wird als zweite CapRove
    - `POSTGRES_PASSWORD=<langes zufälliges Passwort>`
 4. Sicherstellen, dass PostgreSQL `/var/lib/postgresql/data` persistent speichert. Die One-Click-App richtet das normalerweise bereits ein.
 
-Der interne Datenbankhost lautet anschließend üblicherweise `srv-captain--eventlotse-db`. PostgreSQL muss nicht öffentlich erreichbar sein.
+Der interne Datenbankhost lautet bei aktuellen CapRover-Versionen `eventlotse-db`. Bei älteren Installationen funktioniert auch der Alias `srv-captain--eventlotse-db`. PostgreSQL muss und sollte nicht öffentlich erreichbar sein.
 
 ## 2. Eventlotse-App anlegen
 
@@ -38,7 +38,7 @@ HOST=0.0.0.0
 PORT=3000
 PUBLIC_BASE_URL=https://eventlotse.example.org
 COOKIE_SECURE=true
-DATABASE_URL=postgres://eventlotse:DEIN_PASSWORT@srv-captain--eventlotse-db:5432/eventlotse
+DATABASE_URL=postgres://eventlotse:DEIN_PASSWORT@eventlotse-db:5432/eventlotse
 JWT_SECRET=EIN_LANGER_ZUFAELLIGER_WERT
 UPLOAD_DIR=/app/data/uploads
 BACKUP_DIR=/app/data/backups
@@ -73,3 +73,26 @@ Im Adminbereich unter **Backup & Wiederherstellung** kannst du:
 Vor jedem Restore erstellt Eventlotse automatisch ein Sicherheitsbackup des aktuellen Stands. CapRover-Umgebungsvariablen werden nicht aus dem Archiv wiederhergestellt.
 
 Für echten Schutz gegen einen vollständigen Serverausfall sollten Backup-Dateien regelmäßig heruntergeladen oder zusätzlich außerhalb des CapRover-Servers gesichert werden.
+
+## Fehlerhilfe
+
+### `ECONNREFUSED 127.0.0.1:5432`
+
+Dieser Fehler bedeutet nicht, dass PostgreSQL nur noch starten muss. Eventlotse hat keine wirksame `DATABASE_URL` erhalten und versucht deshalb fälschlicherweise, eine Datenbank im eigenen Container zu erreichen.
+
+1. In CapRover die **Eventlotse-App** öffnen.
+2. Unter **App Configs > Environmental Variables** `DATABASE_URL` eintragen.
+3. Als Host den Namen der PostgreSQL-App verwenden, zum Beispiel `eventlotse-db`, niemals `localhost` oder `127.0.0.1`.
+4. **Save & Update** anklicken und Eventlotse neu starten.
+
+Beispiel:
+
+```env
+DATABASE_URL=postgres://eventlotse:DEIN_PASSWORT@eventlotse-db:5432/eventlotse
+```
+
+Benutzer, Passwort und Datenbankname müssen exakt den Werten der PostgreSQL-App entsprechen. Sonderzeichen im Passwort müssen URL-kodiert werden.
+
+### Es erscheint eine Nginx-Standardseite
+
+Das Eventlotse-Image enthält kein Nginx. Eine Nginx-Standardseite stammt daher von einer anderen oder älteren CapRover-App. Weise die gewünschte Domain unter **HTTP Settings** der Eventlotse-App zu, stelle den Container-Port auf `3000` und entferne die Domain aus der bisherigen Nginx-App.
