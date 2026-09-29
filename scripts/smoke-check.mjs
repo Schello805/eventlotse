@@ -11,6 +11,10 @@ const requiredFiles = [
   'scripts/update-ubuntu-24.04.sh',
   'scripts/backup.sh',
   'scripts/restore.sh',
+  'Dockerfile',
+  'captain-definition',
+  'docker-entrypoint.sh',
+  'docs/CAPROVER.md',
   'docs/SELF_HOSTING.md',
   'SECURITY.md',
 ]

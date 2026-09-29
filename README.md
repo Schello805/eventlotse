@@ -4,9 +4,11 @@ Eventlotse ist eine selbst hostbare Web-App für private Veranstaltungen: Events
 
 Repository: https://github.com/Schello805/eventlotse
 
+CapRover-Installation: [docs/CAPROVER.md](docs/CAPROVER.md)
+
 ## Status
 
-Rev. `v0.4.44` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, feineren Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und robusterem Update-Script. Ohne Server läuft die App weiterhin lokal im Browser.
+Rev. `v0.5.0` enthält neben der Frontend-App jetzt auch eine Self-Hosting-Serverbasis mit PostgreSQL, Authentifizierung, feineren Rollenrechten, CSRF-Schutz, gehärteten Datei-Uploads, SMTP-Testmail, Einladungsmail-Vorlage, Auditlog, Event-Template-Store, Backup/Restore und CapRover-Unterstützung. Ohne Server läuft die App weiterhin lokal im Browser.
 
 ## Funktionen
 
@@ -164,6 +166,8 @@ sudo SERVER_NAME=eventlotse.schellenberger.biz ./scripts/update-ubuntu-24.04.sh
 
 ### Backups
 
+Im Adminbereich können Backups manuell erstellt, heruntergeladen, hochgeladen, gelöscht und wiederhergestellt werden. Zusätzlich erstellt Eventlotse täglich automatisch eine Sicherung. Die Aufbewahrung ist auf 30 Tage, 90 Tage oder eine frei gewählte Anzahl Tage einstellbar.
+
 ```bash
 sudo /opt/eventlotse/scripts/backup.sh
 ```
@@ -175,6 +179,8 @@ sudo systemctl stop eventlotse
 sudo /opt/eventlotse/scripts/restore.sh /var/backups/eventlotse/eventlotse-YYYYMMDD-HHMMSS.tar.gz
 sudo systemctl status eventlotse
 ```
+
+Ein Backup enthält PostgreSQL und alle Uploads. Vor einem Restore wird automatisch ein zusätzliches Sicherheitsbackup erzeugt. Für CapRover siehe [docs/CAPROVER.md](docs/CAPROVER.md).
 
 ### Admin-Passwort zurücksetzen
 
@@ -216,6 +222,7 @@ Wichtig: Nicht-kommerzielle Einschränkungen entsprechen nicht der strengen OSI-
 ## Dokumente
 
 - [Self-Hosting](docs/SELF_HOSTING.md)
+- [CapRover-Installation](docs/CAPROVER.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Rechtliche Vorlagen](docs/LEGAL.md)
 - [Security Policy](SECURITY.md)

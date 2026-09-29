@@ -20,7 +20,7 @@ if [ -f "$ENV_FILE" ]; then
   # shellcheck disable=SC1090
   . "$ENV_FILE"
   set +a
-else
+elif [ -z "${DATABASE_URL:-}" ]; then
   echo "${ENV_FILE} fehlt. Restore abgebrochen." >&2
   exit 1
 fi
@@ -31,7 +31,28 @@ cleanup() {
 }
 trap cleanup EXIT
 
+validate_archive() {
+  local archive="$1"
+  while IFS= read -r entry; do
+    case "$entry" in
+      /*|*"../"*|"..")
+        echo "Unsicherer Pfad im Backup-Archiv: $entry" >&2
+        exit 1
+        ;;
+    esac
+  done < <(tar -tzf "$archive")
+  while IFS= read -r details; do
+    case "$details" in
+      l*|h*)
+        echo "Links sind in Backup-Archiven nicht erlaubt." >&2
+        exit 1
+        ;;
+    esac
+  done < <(tar -tvzf "$archive")
+}
+
 log "Entpacke Backup."
+validate_archive "$RESTORE_ARCHIVE"
 tar -C "$TMP_DIR" -xzf "$RESTORE_ARCHIVE"
 RESTORE_DIR="$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
 
@@ -41,13 +62,20 @@ if [ -z "$RESTORE_DIR" ] || [ ! -f "$RESTORE_DIR/database.sql.gz" ]; then
 fi
 
 log "Stelle Datenbank wieder her."
-gunzip -c "$RESTORE_DIR/database.sql.gz" | psql "${DATABASE_URL:?DATABASE_URL fehlt}"
+gunzip -c "$RESTORE_DIR/database.sql.gz" | psql -v ON_ERROR_STOP=1 "${DATABASE_URL:?DATABASE_URL fehlt}"
 
 if [ -f "$RESTORE_DIR/uploads.tar.gz" ]; then
   log "Stelle Uploads wieder her."
-  mkdir -p "$(dirname "${UPLOAD_DIR:-/var/lib/eventlotse/uploads}")"
-  tar -C "$(dirname "${UPLOAD_DIR:-/var/lib/eventlotse/uploads}")" -xzf "$RESTORE_DIR/uploads.tar.gz"
-  chown -R www-data:www-data "${UPLOAD_DIR:-/var/lib/eventlotse/uploads}" 2>/dev/null || true
+  validate_archive "$RESTORE_DIR/uploads.tar.gz"
+  RESTORE_UPLOAD_DIR="${UPLOAD_DIR:-/var/lib/eventlotse/uploads}"
+  if [ -z "$RESTORE_UPLOAD_DIR" ] || [ "$RESTORE_UPLOAD_DIR" = "/" ]; then
+    echo "Unsicheres Upload-Ziel. Restore abgebrochen." >&2
+    exit 1
+  fi
+  rm -rf "$RESTORE_UPLOAD_DIR"
+  mkdir -p "$(dirname "$RESTORE_UPLOAD_DIR")"
+  tar -C "$(dirname "$RESTORE_UPLOAD_DIR")" -xzf "$RESTORE_DIR/uploads.tar.gz"
+  chown -R www-data:www-data "$RESTORE_UPLOAD_DIR" 2>/dev/null || true
 fi
 
 if [ "$RESTORE_ENV" = "true" ] && [ -f "$RESTORE_DIR/eventlotse.env" ]; then

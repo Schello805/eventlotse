@@ -28,6 +28,7 @@ export function appSettingsFromEnv() {
     smtpFrom: config.smtp.from,
     smtpTls: !config.smtp.secure,
     reminderLeadDays: Number(config.reminderLeadDays || 3),
+    backupRetentionDays: Number(process.env.BACKUP_RETENTION_DAYS || 30),
     allowUserEventCreation: false,
     eventTemplates: defaultEventTemplates,
   }
@@ -84,6 +85,7 @@ export function mergeAppSettings(stored = {}) {
     smtpFrom: !isPlaceholderValue(stored.smtpFrom) ? stored.smtpFrom : env.smtpFrom,
     smtpTls: typeof stored.smtpTls === 'boolean' ? stored.smtpTls : env.smtpTls,
     reminderLeadDays: Number.isFinite(Number(stored.reminderLeadDays)) ? Math.max(0, Math.min(30, Number(stored.reminderLeadDays))) : env.reminderLeadDays,
+    backupRetentionDays: Number.isFinite(Number(stored.backupRetentionDays)) ? Math.max(1, Math.min(3650, Number(stored.backupRetentionDays))) : env.backupRetentionDays,
     allowUserEventCreation: stored.allowUserEventCreation === true,
     eventTemplates: normalizeEventTemplates(stored.eventTemplates || env.eventTemplates),
   }

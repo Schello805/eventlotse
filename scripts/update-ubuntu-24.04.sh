@@ -107,6 +107,9 @@ ensure_env_file() {
     write_env_line JWT_SECRET "$JWT_SECRET"
     write_env_line COOKIE_SECURE false
     write_env_line UPLOAD_DIR /var/lib/eventlotse/uploads
+    write_env_line BACKUP_DIR /var/backups/eventlotse
+    write_env_line BACKUP_HOUR 3
+    write_env_line BACKUP_RETENTION_DAYS 30
     write_env_line ADMIN_EMAIL "$ADMIN_EMAIL"
     write_env_line ADMIN_PASSWORD "$ADMIN_PASSWORD"
     write_env_line REMINDER_HOUR "$REMINDER_HOUR"
@@ -227,7 +230,7 @@ backup_current_state() {
   load_env
   local stamp
   stamp="$(date +%Y%m%d-%H%M%S)"
-  install -d -m 0750 "$BACKUP_DIR"
+  install -d -m 0750 -o www-data -g www-data "$BACKUP_DIR"
   log "Erstelle Backup unter ${BACKUP_DIR}."
   cp "$ENV_FILE" "${BACKUP_DIR}/eventlotse-${stamp}.env"
   chmod 0600 "${BACKUP_DIR}/eventlotse-${stamp}.env"
@@ -235,6 +238,7 @@ backup_current_state() {
     pg_dump "$DATABASE_URL" | gzip > "${BACKUP_DIR}/eventlotse-${stamp}.sql.gz"
     chmod 0600 "${BACKUP_DIR}/eventlotse-${stamp}.sql.gz"
   fi
+  chown -R www-data:www-data "$BACKUP_DIR"
 }
 
 ensure_systemd_service() {
@@ -406,6 +410,7 @@ main() {
   ensure_database
   load_env
   install -d -m 0750 -o www-data -g www-data "${UPLOAD_DIR:-/var/lib/eventlotse/uploads}"
+  install -d -m 0750 -o www-data -g www-data "${BACKUP_DIR:-/var/backups/eventlotse}"
   ensure_systemd_service
   backup_current_state
 

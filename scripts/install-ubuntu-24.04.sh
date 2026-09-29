@@ -138,6 +138,9 @@ write_env_file() {
     write_env_line JWT_SECRET "$JWT_SECRET"
     write_env_line COOKIE_SECURE "$cookie_secure"
     write_env_line UPLOAD_DIR /var/lib/eventlotse/uploads
+    write_env_line BACKUP_DIR /var/backups/eventlotse
+    write_env_line BACKUP_HOUR 3
+    write_env_line BACKUP_RETENTION_DAYS 30
     write_env_line ADMIN_EMAIL "$ADMIN_EMAIL"
     write_env_line ADMIN_PASSWORD "$ADMIN_PASSWORD"
     write_env_line REMINDER_HOUR "$REMINDER_HOUR"
@@ -152,6 +155,7 @@ write_env_file() {
   chmod 0640 "$ENV_FILE"
   chown root:www-data "$ENV_FILE"
   install -d -m 0750 -o www-data -g www-data /var/lib/eventlotse/uploads
+  install -d -m 0750 -o www-data -g www-data /var/backups/eventlotse
 }
 
 write_systemd_service() {

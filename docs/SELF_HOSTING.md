@@ -53,6 +53,8 @@ server {
 
 ## Backups
 
+Backups lassen sich auch direkt im Adminbereich verwalten. Dort stehen tägliche automatische Sicherungen, manuelle Backups, Download, Upload und Restore zur Verfügung. Die Aufbewahrung kann auf 30 Tage, 90 Tage oder frei gewählt werden.
+
 ```bash
 sudo /opt/eventlotse/scripts/backup.sh
 ```
@@ -63,7 +65,7 @@ Die Backups liegen standardmäßig unter `/var/backups/eventlotse` und enthalten
 - Upload-Verzeichnis
 - Umgebungskonfiguration aus `/etc/eventlotse/eventlotse.env`
 
-Alte Backups werden nach `KEEP_DAYS` Tagen gelöscht, Standard ist `14`.
+Alte Backups werden nach `KEEP_DAYS` beziehungsweise der Einstellung im Adminbereich gelöscht. Standard sind `30` Tage.
 
 ## Restore
 
@@ -86,6 +88,8 @@ sudo systemctl status eventlotse
 ```
 
 Wenn du komplett auf einen neuen Server umziehst, zuerst Installation ausführen, dann Service stoppen, Restore einspielen und anschließend wieder starten. Mit `RESTORE_ENV=true` kann auch die gesicherte Umgebungskonfiguration zurückgeschrieben werden.
+
+Bei einem Restore im Adminbereich wird die Umgebungskonfiguration grundsätzlich nicht überschrieben. Vorher wird automatisch ein Sicherheitsbackup des aktuellen Stands erstellt.
 
 ## Enthaltene Produktionsbausteine
 

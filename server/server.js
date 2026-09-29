@@ -13,6 +13,7 @@ import multer from 'multer'
 import path from 'node:path'
 import PDFDocument from 'pdfkit'
 import { canReadEventWithQuery, canWriteEventWithQuery, eventRoleWithQuery } from './authz.js'
+import { backupOperation, backupPath, createBackup, deleteBackup, listBackups, restoreBackup, storeUploadedBackup, validBackupName } from './backup-service.js'
 import { config } from './config.js'
 import { encryptSecret } from './crypto-box.js'
 import { canHelperUpdateEvent } from './event-permissions.js'
@@ -33,8 +34,13 @@ const upload = multer({
   dest: config.uploadDir,
   limits: { fileSize: 20 * 1024 * 1024 },
 })
+const backupUpload = multer({
+  dest: config.backupDir,
+  limits: { fileSize: 1024 * 1024 * 1024 },
+})
 
 fs.mkdirSync(config.uploadDir, { recursive: true })
+fs.mkdirSync(config.backupDir, { recursive: true })
 
 app.disable('x-powered-by')
 app.set('trust proxy', 1)
@@ -345,6 +351,44 @@ function scheduleReminderWorker() {
   }
   setTimeout(tick, 30_000)
   return setInterval(tick, 15 * 60 * 1000)
+}
+
+async function runScheduledBackup() {
+  const nowParts = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date())
+  const part = (type) => nowParts.find((entry) => entry.type === type)?.value || ''
+  const today = `${part('year')}-${part('month')}-${part('day')}`
+  if (Number(part('hour')) < config.backupHour) return null
+  const already = await query("SELECT value FROM settings WHERE key = 'backups:lastRun'")
+  if (already.rows[0]?.value?.date === today || backupOperation()) return null
+  const settings = mergeAppSettings(await loadStoredSettings())
+  const backup = await createBackup(settings.backupRetentionDays)
+  await query(
+    `INSERT INTO settings (key, value, updated_at) VALUES ('backups:lastRun', $1, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [JSON.stringify({ date: today, name: backup.name })],
+  )
+  await audit(null, `Automatisches Backup "${backup.name}" wurde erstellt.`)
+  return backup
+}
+
+function scheduleBackupWorker() {
+  if (config.nodeEnv === 'test') return
+  const tick = async () => {
+    try {
+      await runScheduledBackup()
+    } catch (error) {
+      console.error('[Eventlotse] Automatisches Backup fehlgeschlagen.', error)
+    }
+  }
+  setTimeout(tick, 45_000)
+  return setInterval(tick, 30 * 60 * 1000)
 }
 
 app.get('/api/health', (_request, response) => {
@@ -1142,6 +1186,72 @@ app.post('/api/admin/reminders/run', requireAuth, requireAdmin, async (request, 
   response.json({ sent })
 })
 
+app.get('/api/admin/backups', requireAuth, requireAdmin, async (_request, response) => {
+  const settings = mergeAppSettings(await loadStoredSettings())
+  response.json({
+    backups: await listBackups(),
+    retentionDays: settings.backupRetentionDays,
+    operation: backupOperation(),
+  })
+})
+
+app.post('/api/admin/backups', requireAuth, requireAdmin, async (request, response) => {
+  try {
+    const settings = mergeAppSettings(await loadStoredSettings())
+    const backup = await createBackup(settings.backupRetentionDays)
+    await audit(request.user, `Backup "${backup.name}" wurde manuell erstellt.`)
+    response.status(201).json({ backup, backups: await listBackups() })
+  } catch (error) {
+    response.status(409).json({ message: error instanceof Error ? error.message : 'Backup konnte nicht erstellt werden.' })
+  }
+})
+
+app.post('/api/admin/backups/upload', requireAuth, requireAdmin, backupUpload.single('backup'), async (request, response) => {
+  try {
+    const name = await storeUploadedBackup(request.file)
+    await audit(request.user, `Backup "${name}" wurde hochgeladen.`)
+    response.status(201).json({ name, backups: await listBackups() })
+  } catch (error) {
+    if (request.file?.path) fs.rm(request.file.path, { force: true }, () => undefined)
+    response.status(400).json({ message: error instanceof Error ? error.message : 'Backup konnte nicht hochgeladen werden.' })
+  }
+})
+
+app.get('/api/admin/backups/:name/download', requireAuth, requireAdmin, (request, response) => {
+  try {
+    response.download(backupPath(request.params.name), request.params.name, (error) => {
+      if (error && !response.headersSent) response.status(404).json({ message: 'Backup nicht gefunden.' })
+    })
+  } catch (error) {
+    response.status(400).json({ message: error instanceof Error ? error.message : 'Ungültiges Backup.' })
+  }
+})
+
+app.delete('/api/admin/backups/:name', requireAuth, requireAdmin, async (request, response) => {
+  try {
+    await deleteBackup(request.params.name)
+    await audit(request.user, `Backup "${request.params.name}" wurde gelöscht.`)
+    response.json({ backups: await listBackups() })
+  } catch (error) {
+    response.status(validBackupName(request.params.name) ? 404 : 400).json({ message: error instanceof Error ? error.message : 'Backup konnte nicht gelöscht werden.' })
+  }
+})
+
+app.post('/api/admin/backups/:name/restore', requireAuth, requireAdmin, async (request, response) => {
+  if (request.body?.confirmation !== 'WIEDERHERSTELLEN') {
+    return response.status(400).json({ message: 'Bitte die Wiederherstellung ausdrücklich bestätigen.' })
+  }
+  try {
+    const settings = mergeAppSettings(await loadStoredSettings())
+    await restoreBackup(request.params.name, settings.backupRetentionDays)
+    // Der angemeldete Benutzer kann im wiederhergestellten Datenstand fehlen.
+    await audit(null, `Backup "${request.params.name}" wurde von ${request.user.email} wiederhergestellt.`)
+    response.json({ ok: true, message: 'Wiederherstellung abgeschlossen. Die App wird neu geladen.' })
+  } catch (error) {
+    response.status(409).json({ message: error instanceof Error ? error.message : 'Wiederherstellung fehlgeschlagen.' })
+  }
+})
+
 app.use('/uploads', requireAuth, express.static(config.uploadDir))
 if (fs.existsSync(distDir)) {
   app.use(express.static(distDir))
@@ -1167,10 +1277,12 @@ server.on('error', (error) => {
 })
 server.ref()
 const reminderTimer = scheduleReminderWorker()
+const backupTimer = scheduleBackupWorker()
 const keepAlive = setInterval(() => undefined, 60 * 60 * 1000)
 
 process.on('SIGTERM', async () => {
   if (reminderTimer) clearInterval(reminderTimer)
+  if (backupTimer) clearInterval(backupTimer)
   clearInterval(keepAlive)
   server.close()
   await pool.end()

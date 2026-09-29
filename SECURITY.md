@@ -11,7 +11,7 @@ Bitte keine Sicherheitslücken öffentlich als Issue posten. Melde sie direkt an
 ## Hinweise für Self-Hosting
 
 - HTTPS aktivieren.
-- Regelmäßige Backups mit `scripts/backup.sh` einrichten und Restore gelegentlich testen.
+- Automatische Backups im Adminbereich aktiv überwachen, mindestens ein externes Backup vorhalten und Restore gelegentlich testen.
 - Admin-Zugänge mit starken Passwörtern schützen.
 - Datei-Uploads werden serverseitig nach Endung und ausführbarer Signatur geprüft. Trotzdem sollten Uploads nicht öffentlich ausgeliefert werden.
 - E-Mail-Benachrichtigungen nur über vertrauenswürdige SMTP-Zugänge senden.

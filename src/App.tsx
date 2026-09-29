@@ -155,6 +155,7 @@ type AppSettings = {
   smtpFrom: string
   smtpTls: boolean
   reminderLeadDays: number
+  backupRetentionDays: number
   allowUserEventCreation: boolean
   eventTemplates: EventTemplate[]
 }
@@ -173,6 +174,12 @@ type StoredFile = {
   mime_type: string
   size_bytes: number
   created_at: string
+}
+
+type BackupEntry = {
+  name: string
+  size: number
+  createdAt: string
 }
 
 type EventTab = 'overview' | 'tasks' | 'team' | 'infrastructure' | 'schedule'
@@ -364,6 +371,7 @@ const defaultSettings: AppSettings = {
   smtpFrom: 'Eventlotse <info@example.org>',
   smtpTls: true,
   reminderLeadDays: 3,
+  backupRetentionDays: 30,
   allowUserEventCreation: false,
   eventTemplates: builtInEventTemplates,
 }
@@ -387,6 +395,7 @@ const settingsSchema = z.object({
   smtpFrom: z.string().trim().min(1, 'Absender fehlt.'),
   smtpTls: z.boolean().default(true),
   reminderLeadDays: z.number().min(0).max(30).default(3),
+  backupRetentionDays: z.number().min(1, 'Mindestens ein Tag.').max(3650, 'Maximal 3650 Tage.').default(30),
   allowUserEventCreation: z.boolean().default(false),
 })
 
@@ -2828,10 +2837,34 @@ function AdminPage({
   const [testMailTo, setTestMailTo] = useState(settings.smtpUser || 'info@schellenberger.biz')
   const [testMailPending, setTestMailPending] = useState(false)
   const [templateJson, setTemplateJson] = useState('')
+  const [backups, setBackups] = useState<BackupEntry[]>([])
+  const [backupPending, setBackupPending] = useState(false)
+  const [retentionMode, setRetentionMode] = useState(settings.backupRetentionDays === 30 || settings.backupRetentionDays === 90 ? String(settings.backupRetentionDays) : 'custom')
   const settingsForm = useForm<SettingsFormInput, unknown, SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
     defaultValues: settings,
   })
+  const backupRetentionDays = useWatch({ control: settingsForm.control, name: 'backupRetentionDays' })
+
+  const loadBackups = useCallback(async () => {
+    try {
+      const response = await secureFetch('/api/admin/backups')
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.message || 'Backups konnten nicht geladen werden.')
+      setBackups(Array.isArray(data.backups) ? data.backups : [])
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Backups konnten nicht geladen werden.')
+    }
+  }, [notify])
+
+  useEffect(() => {
+    secureFetch('/api/admin/backups')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (Array.isArray(data?.backups)) setBackups(data.backups)
+      })
+      .catch(() => undefined)
+  }, [])
 
   const saveSettings = async (data: SettingsFormValues) => {
     const nextSettings = { ...data, smtpPass: data.smtpPass ? '********' : settings.smtpPass, eventTemplates: templates }
@@ -2947,6 +2980,73 @@ function AdminPage({
     notify(`${data.sent?.length || 0} Erinnerungsmails wurden gesendet.`)
   }
 
+  const createManualBackup = async () => {
+    setBackupPending(true)
+    try {
+      const response = await secureFetch('/api/admin/backups', { method: 'POST' })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.message || 'Backup konnte nicht erstellt werden.')
+      setBackups(data.backups || [])
+      notify(`Backup "${data.backup?.name || ''}" wurde erstellt.`)
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Backup konnte nicht erstellt werden.')
+    } finally {
+      setBackupPending(false)
+    }
+  }
+
+  const uploadBackup = async (file: File | undefined) => {
+    if (!file) return
+    setBackupPending(true)
+    try {
+      const formData = new FormData()
+      formData.append('backup', file)
+      const response = await secureFetch('/api/admin/backups/upload', { method: 'POST', body: formData })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.message || 'Backup konnte nicht hochgeladen werden.')
+      setBackups(data.backups || [])
+      notify('Backup wurde hochgeladen und geprüft.')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Backup konnte nicht hochgeladen werden.')
+    } finally {
+      setBackupPending(false)
+    }
+  }
+
+  const removeBackup = async (backup: BackupEntry) => {
+    if (!window.confirm(`Backup "${backup.name}" wirklich löschen?`)) return
+    const response = await secureFetch(`/api/admin/backups/${encodeURIComponent(backup.name)}`, { method: 'DELETE' })
+    const data = await response.json().catch(() => null)
+    if (!response.ok) {
+      notify(data?.message || 'Backup konnte nicht gelöscht werden.')
+      return
+    }
+    setBackups(data.backups || [])
+    notify('Backup wurde gelöscht.')
+  }
+
+  const restoreStoredBackup = async (backup: BackupEntry) => {
+    const confirmation = window.prompt(`Achtung: Alle aktuellen Daten und Uploads werden durch "${backup.name}" ersetzt. Vorher wird automatisch ein Sicherheitsbackup erstellt. Tippe WIEDERHERSTELLEN zum Fortfahren.`)
+    if (confirmation !== 'WIEDERHERSTELLEN') {
+      notify('Wiederherstellung wurde abgebrochen.')
+      return
+    }
+    setBackupPending(true)
+    try {
+      const response = await secureFetch(`/api/admin/backups/${encodeURIComponent(backup.name)}/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmation }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.message || 'Wiederherstellung fehlgeschlagen.')
+      window.location.reload()
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Wiederherstellung fehlgeschlagen.')
+      setBackupPending(false)
+    }
+  }
+
   return (
     <section className="admin-page">
       <div className="admin-hero">
@@ -2968,6 +3068,7 @@ function AdminPage({
           <summary><span>SMTP & Base URL</span><Server size={18} /></summary>
           <p className="help-text">SMTP ist der Mailserver für spätere Einladungen und Erinnerungen. Die Base URL ist die öffentliche Adresse deiner Installation.</p>
           <form className="admin-form" onSubmit={settingsForm.handleSubmit(saveSettings)}>
+            <input type="hidden" {...settingsForm.register('backupRetentionDays', { valueAsNumber: true })} />
             <label className="field">
               <span className="label-row">Base URL <HelpHint text="Öffentliche Adresse, unter der Eventlotse später Links in E-Mails erzeugt." /></span>
               <input placeholder="https://eventlotse.example.org" {...settingsForm.register('baseUrl')} />
@@ -3021,6 +3122,75 @@ function AdminPage({
               </button>
             </div>
           </div>
+        </details>
+
+        <details className="panel admin-panel accordion-panel span-2" open>
+          <summary><span>Backup & Wiederherstellung</span><Archive size={18} /></summary>
+          <p className="help-text">Eventlotse erstellt täglich ein Backup von PostgreSQL und allen Uploads, standardmäßig nach 03:00 Uhr. Die Archive liegen im persistenten Backup-Verzeichnis und können zusätzlich heruntergeladen werden.</p>
+          <div className="backup-settings">
+            <label className="field">
+              <span>Backups aufbewahren</span>
+              <select
+                value={retentionMode}
+                onChange={(change) => {
+                  const mode = change.target.value
+                  setRetentionMode(mode)
+                  if (mode === '30' || mode === '90') settingsForm.setValue('backupRetentionDays', Number(mode), { shouldDirty: true })
+                }}
+              >
+                <option value="30">30 Tage</option>
+                <option value="90">90 Tage</option>
+                <option value="custom">Eigene Anzahl</option>
+              </select>
+            </label>
+            {retentionMode === 'custom' && (
+              <label className="field">
+                <span>Eigene Anzahl Tage</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="3650"
+                  value={backupRetentionDays || 30}
+                  onChange={(change) => settingsForm.setValue('backupRetentionDays', Number(change.target.value), { shouldDirty: true })}
+                />
+              </label>
+            )}
+            <div className="backup-retention-note">
+              <strong>{backupRetentionDays || 30} Tage</strong>
+              <span>Ältere automatische und manuelle Backups werden beim nächsten Backup-Lauf gelöscht.</span>
+            </div>
+            <button className="ghost" type="button" onClick={settingsForm.handleSubmit(saveSettings)}><Save size={16} /> Aufbewahrung speichern</button>
+          </div>
+          <div className="template-toolbar">
+            <button className="primary" type="button" onClick={createManualBackup} disabled={backupPending}>
+              <Archive size={16} /> {backupPending ? 'Bitte warten...' : 'Jetzt sichern'}
+            </button>
+            <label className="ghost file-import-button">
+              <Upload size={16} /> Backup hochladen
+              <input type="file" accept=".tar.gz,application/gzip" disabled={backupPending} onChange={(event) => uploadBackup(event.target.files?.[0])} />
+            </label>
+            <button className="ghost" type="button" onClick={loadBackups} disabled={backupPending}><RotateCcw size={16} /> Liste aktualisieren</button>
+          </div>
+          {backups.length === 0 ? (
+            <EmptyState title="Noch kein Backup vorhanden" text="Erstelle jetzt das erste Backup. Danach läuft die Sicherung täglich automatisch." actionLabel="Erstes Backup erstellen" onAction={createManualBackup} />
+          ) : (
+            <div className="backup-list">
+              {backups.map((backup) => (
+                <article className="backup-row" key={backup.name}>
+                  <div>
+                    <strong>{new Date(backup.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })}</strong>
+                    <span>{backup.name} · {formatFileSize(backup.size)}</span>
+                  </div>
+                  <div className="backup-actions">
+                    <a className="ghost" href={`/api/admin/backups/${encodeURIComponent(backup.name)}/download`}><Download size={15} /> Herunterladen</a>
+                    <button className="ghost" type="button" onClick={() => restoreStoredBackup(backup)} disabled={backupPending}><RotateCcw size={15} /> Wiederherstellen</button>
+                    <button className="icon-button danger" type="button" onClick={() => removeBackup(backup)} disabled={backupPending} aria-label={`${backup.name} löschen`}><Trash2 size={15} /></button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+          <p className="help-text"><strong>Restore ersetzt den aktuellen Stand.</strong> Eventlotse legt davor automatisch ein Sicherheitsbackup an. Die Server-Umgebungsvariablen und CapRover-Einstellungen werden nicht überschrieben.</p>
         </details>
 
         <details className="panel admin-panel accordion-panel span-2">
@@ -3518,6 +3688,12 @@ function formatDate(date: string) {
   const parsed = parseISO(date)
   if (!isValid(parsed)) return 'Datum offen'
   return format(parsed, 'dd.MM.yyyy', { locale: de })
+}
+
+function formatFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB'
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`
 }
 
 function CountdownBadge({ eventDate }: { eventDate: string }) {

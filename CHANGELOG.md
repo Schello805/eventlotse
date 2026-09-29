@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.0
+
+- CapRover-Deployment mit Dockerfile, `captain-definition`, Healthcheck und dokumentierter PostgreSQL-Anbindung ergänzt.
+- Persistente Verzeichnisse für Uploads und Backups eingerichtet.
+- Adminbereich um manuelle und tägliche automatische Backups erweitert.
+- Aufbewahrung für 30 Tage, 90 Tage oder eine frei gewählte Dauer ergänzt.
+- Backup-Download, Upload, Löschen und bestätigungspflichtige Wiederherstellung eingebaut.
+- Vor jeder Wiederherstellung wird automatisch ein Sicherheitsbackup erstellt.
+- Backup-Archive werden gegen unsichere Pfade und symbolische oder harte Links geprüft.
+- Ubuntu-Installations- und Update-Skripte auf dieselben persistenten Backup-Pfade und Rechte abgestimmt.
+
 ## v0.4.44
 
 - Server-Fallback für React-Direktlinks robuster gemacht.

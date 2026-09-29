@@ -1988,6 +1988,68 @@ form {
   font-size: 13px;
 }
 
+.backup-settings {
+  margin: 12px 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.6fr) minmax(180px, 0.6fr) minmax(280px, 1.2fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.backup-retention-note {
+  min-height: 58px;
+  padding: 9px 11px;
+  display: grid;
+  gap: 3px;
+  border: 1px solid #cfe8df;
+  border-radius: 8px;
+  background: #f2fbf7;
+}
+
+.backup-retention-note strong {
+  color: #0f766e;
+}
+
+.backup-retention-note span {
+  color: #52627a;
+  font-size: 12px;
+}
+
+.backup-list {
+  display: grid;
+  gap: 8px;
+}
+
+.backup-row {
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #dce6ef;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.backup-row > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.backup-row span {
+  overflow-wrap: anywhere;
+  color: #627084;
+  font-size: 12px;
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -2327,6 +2389,15 @@ form {
 
   .template-card {
     grid-template-columns: 1fr;
+  }
+
+  .backup-settings,
+  .backup-row {
+    grid-template-columns: 1fr;
+  }
+
+  .backup-actions {
+    justify-content: flex-start;
   }
 
   .template-guide {
